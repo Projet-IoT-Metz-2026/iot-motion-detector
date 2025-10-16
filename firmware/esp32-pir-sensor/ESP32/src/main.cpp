@@ -76,11 +76,19 @@ bool base64Decode(const String &in, std::vector<uint8_t> &out) {
 }
 
 String base64Encode(const uint8_t*data,size_t len){
-  size_t n=0;
-  mbedtls_base64_encode(nullptr,0,&n,data,len);
-  std::vector<uint8_t> out(n);
-  mbedtls_base64_encode(out.data(),out.size(),&n,data,len);
-  return String((char*)out.data());
+  size_t outLen = 0;
+  int rc = mbedtls_base64_encode(nullptr, 0, &outLen, data, len);
+  if (rc != MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL) {
+    return "";
+  }
+
+  std::vector<uint8_t> out(outLen);
+  rc = mbedtls_base64_encode(out.data(), out.size(), &outLen, data, len);
+  if (rc != 0) {
+    return "";
+  }
+
+  return String(reinterpret_cast<const char*>(out.data()), outLen);
 }
 
 bool hmacSha256(const std::vector<uint8_t>&key,const uint8_t*msg,size_t len,uint8_t out[32]){

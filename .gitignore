@@ -7,8 +7,8 @@
 **/.vscode/
 
 # Ignorer les fichiers de secrets pour les deux firmwares
-/firmware/esp32-pir-sensor/src/secrets.h
-/firmware/photon2-pir-sensor/src/secrets.h
+/firmware/esp32-pir-sensor/ESP32/src/secrets.h
+/firmware/photon2-pir-sensor/**/src/secrets.h
 
 
 # ===================================================================
