@@ -12,6 +12,20 @@
 #include "mbedtls/md.h"
 #include "esp_task_wdt.h"
 #include <esp_system.h>
+#include <Preferences.h>
+
+// === MODE DEBUG ===
+#define DEBUG_MODE true  // Mettre à false pour production
+
+#if DEBUG_MODE
+  #define DEBUG_PRINT(x) Serial.print(x)
+  #define DEBUG_PRINTLN(x) Serial.println(x)
+  #define DEBUG_PRINTF(x, ...) Serial.printf(x, __VA_ARGS__)
+#else
+  #define DEBUG_PRINT(x)
+  #define DEBUG_PRINTLN(x)
+  #define DEBUG_PRINTF(x, ...)
+#endif
 
 // === CERTIFICAT AZURE ===
 const char* azure_root_ca = \
@@ -38,7 +52,7 @@ const char* azure_root_ca = \
 "MrY=\n" \
 "-----END CERTIFICATE-----\n";
 
-// === CONFIGURATION PIR ===
+// === CONFIGURATION HARDWARE ===
 const int PIR_PIN = 13;
 const int LED_PIN = 2;
 const unsigned long DEBOUNCE_DELAY = 500;
@@ -46,54 +60,79 @@ const unsigned long DEBOUNCE_DELAY = 500;
 // === CONFIGURATION SYSTÈME ===
 const int WDT_TIMEOUT = 30;
 const int MAX_BUFFER_SIZE = 50;
-const char* FIRMWARE_VERSION = "1.9.0";
+const char* FIRMWARE_VERSION = "2.0.0";
 
-// === VARIABLES GLOBALES PIR ===
-bool lastPirState = LOW;
-unsigned long lastStateChangeTime = 0;
-unsigned long lastValidDetectionTime = 0;
-int detectionCount = 0;
-bool motionInProgress = false;
+// === STRUCTURES D'ÉTAT ===
+struct DeviceConfig {
+  bool detectionEnabled = true;
+  unsigned long cooldownPeriod = 5000;
+  String firmwareVersion = FIRMWARE_VERSION;
+};
 
-// === VARIABLES GLOBALES CONFIGURATION (MODIFIABLES) ===
-bool detectionEnabled = true;
-unsigned long cooldownPeriod = 5000;
+struct DeviceMetrics {
+  unsigned long bootTime = 0;
+  int detectionCount = 0;
+  int bufferedMessagesCount = 0;
+  int sentFromBufferCount = 0;
+  unsigned long lastValidDetectionTime = 0;
+  int wifiReconnectCount = 0;
+  int mqttReconnectCount = 0;
+  int failedPublishCount = 0;
+};
 
-// === VARIABLES GLOBALES MÉTRIQUES ===
-unsigned long bootTime = 0;
+struct PirState {
+  bool lastState = LOW;
+  unsigned long lastStateChangeTime = 0;
+  bool motionInProgress = false;
+};
 
-// === STRUCTURES ===
 struct PendingMessage {
   String topic;
   String payload;
   unsigned long timestamp;
 };
 
-// === VARIABLES GLOBALES BUFFER ===
+// === ÉTATS DE CONNEXION ===
+enum ConnectionState {
+  DISCONNECTED,
+  CONNECTING_WIFI,
+  WIFI_CONNECTED,
+  CONNECTING_MQTT,
+  FULLY_CONNECTED
+};
+
+// === INSTANCES GLOBALES ===
+DeviceConfig config;
+DeviceMetrics metrics;
+PirState pirState;
+ConnectionState connectionState = DISCONNECTED;
+
+// === VARIABLES GLOBALES ===
 std::vector<PendingMessage> messageBuffer;
-int bufferedMessagesCount = 0;
-int sentFromBufferCount = 0;
+unsigned long lastConnectionAttempt = 0;
 unsigned long lastBufferCheck = 0;
-const unsigned long BUFFER_CHECK_INTERVAL = 10000;
-
-// === VARIABLES GLOBALES WIFI ===
-unsigned long lastWiFiCheck = 0;
-const unsigned long WIFI_CHECK_INTERVAL = 5000;
-
-// === VARIABLES DEVICE TWIN ===
 unsigned long lastTwinUpdate = 0;
-const unsigned long TWIN_UPDATE_INTERVAL = 60000;
 int twinRequestId = 0;
+
+const unsigned long CONNECTION_RETRY_INTERVAL = 5000;
+const unsigned long BUFFER_CHECK_INTERVAL = 10000;
+const unsigned long TWIN_UPDATE_INTERVAL = 60000;
 
 // === MQTT / Azure ===
 WiFiClientSecure tlsClient;
 PubSubClient mqtt(tlsClient);
 
+// === PREFERENCES (EEPROM) ===
+Preferences preferences;
+
 // === DÉCLARATIONS FORWARD ===
-bool connectIoTHub();
+void handleConnection();
+void connectMQTT();
 void publishStatus();
 void sendBufferedMessages();
 void publishTwinReported();
+void saveConfig();
+void loadConfig();
 
 // ============================================
 // FONCTIONS UTILITAIRES AZURE
@@ -150,6 +189,7 @@ bool waitForTime(uint32_t ms=10000){
     time(&now); 
     if(now>1700000000) return true; 
     delay(200); 
+    esp_task_wdt_reset();
   }
   return false;
 }
@@ -164,16 +204,38 @@ String buildSasToken(const String&host,const String&dev,const String&keyB64,uint
 
   std::vector<uint8_t> key;
   if(!base64Decode(keyB64,key)){ 
-    Serial.println("[AZURE] Clé Base64 invalide"); 
+    DEBUG_PRINTLN("[AZURE] Clé Base64 invalide"); 
     return ""; 
   }
   uint8_t mac[32];
   if(!hmacSha256(key,(const uint8_t*)toSign.c_str(),toSign.length(),mac)){ 
-    Serial.println("[AZURE] HMAC échec"); 
+    DEBUG_PRINTLN("[AZURE] HMAC échec"); 
     return ""; 
   }
   String sig=urlEncode(base64Encode(mac,sizeof(mac)));
   return "SharedAccessSignature sr="+urlEncode(res)+"&sig="+sig+"&se="+String(exp);
+}
+
+// ============================================
+// FONCTIONS CONFIGURATION (EEPROM)
+// ============================================
+
+void saveConfig() {
+  preferences.begin("iot-detector", false);
+  preferences.putBool("detectionEnabled", config.detectionEnabled);
+  preferences.putULong("cooldown", config.cooldownPeriod);
+  preferences.end();
+  DEBUG_PRINTLN("[CONFIG] ✅ Sauvegardé en EEPROM");
+}
+
+void loadConfig() {
+  preferences.begin("iot-detector", true);
+  config.detectionEnabled = preferences.getBool("detectionEnabled", true);
+  config.cooldownPeriod = preferences.getULong("cooldown", 5000);
+  preferences.end();
+  DEBUG_PRINTF("[CONFIG] ✅ Chargé: detectionEnabled=%s, cooldown=%lu ms\n", 
+               config.detectionEnabled ? "true" : "false", 
+               config.cooldownPeriod);
 }
 
 // ============================================
@@ -182,7 +244,7 @@ String buildSasToken(const String&host,const String&dev,const String&keyB64,uint
 
 void addToBuffer(const String& topic, const String& payload) {
   if (messageBuffer.size() >= MAX_BUFFER_SIZE) {
-    Serial.println("[BUFFER] ⚠️ Buffer plein, suppression du plus ancien");
+    DEBUG_PRINTLN("[BUFFER] ⚠️ Buffer plein, suppression du plus ancien");
     messageBuffer.erase(messageBuffer.begin());
   }
   
@@ -192,9 +254,9 @@ void addToBuffer(const String& topic, const String& payload) {
   msg.timestamp = millis();
   
   messageBuffer.push_back(msg);
-  bufferedMessagesCount++;
+  metrics.bufferedMessagesCount++;
   
-  Serial.printf("[BUFFER] Message ajouté (#%d en attente)\n", messageBuffer.size());
+  DEBUG_PRINTF("[BUFFER] Message ajouté (#%d en attente)\n", messageBuffer.size());
 }
 
 void sendBufferedMessages() {
@@ -202,12 +264,12 @@ void sendBufferedMessages() {
     return;
   }
   
-  if (!mqtt.connected()) {
-    Serial.println("[BUFFER] MQTT déconnecté, impossible d'envoyer");
+  if (connectionState != FULLY_CONNECTED) {
+    DEBUG_PRINTLN("[BUFFER] Pas connecté, impossible d'envoyer");
     return;
   }
   
-  Serial.printf("[BUFFER] 📤 Envoi de %d messages en attente...\n", messageBuffer.size());
+  DEBUG_PRINTF("[BUFFER] 📤 Envoi de %d messages en attente...\n", messageBuffer.size());
   
   std::vector<PendingMessage> toSend = messageBuffer;
   messageBuffer.clear();
@@ -220,34 +282,110 @@ void sendBufferedMessages() {
     
     if (ok) {
       successCount++;
-      sentFromBufferCount++;
-      Serial.printf("[BUFFER] ✅ %d/%d envoyé\n", i+1, toSend.size());
+      metrics.sentFromBufferCount++;
+      DEBUG_PRINTF("[BUFFER] ✅ %d/%d envoyé\n", i+1, toSend.size());
       delay(100);
     } else {
       failCount++;
-      Serial.printf("[BUFFER] ❌ %d/%d échoué\n", i+1, toSend.size());
+      DEBUG_PRINTF("[BUFFER] ❌ %d/%d échoué\n", i+1, toSend.size());
       addToBuffer(toSend[i].topic, toSend[i].payload);
     }
     
     esp_task_wdt_reset();
   }
   
-  Serial.printf("[BUFFER] 📊 Résumé: %d ✅, %d ❌\n", successCount, failCount);
+  DEBUG_PRINTF("[BUFFER] 📊 Résumé: %d ✅, %d ❌\n", successCount, failCount);
 }
 
 // ============================================
-// FONCTIONS DEVICE TWIN
+// FONCTIONS PUBLICATION (AVEC ARDUINOJSON)
 // ============================================
+
+void publishDetectionJson(){
+  String topic = "devices/" + String(IOTHUB_DEVICE_ID) + "/messages/events/";
+  
+  StaticJsonDocument<512> doc;
+  
+  doc["event"] = "motion";
+  doc["count"] = metrics.detectionCount;
+  doc["ts"] = millis();
+  
+  JsonObject configObj = doc.createNestedObject("config");
+  configObj["detectionEnabled"] = config.detectionEnabled;
+  configObj["cooldown"] = config.cooldownPeriod;
+  configObj["firmware"] = config.firmwareVersion;
+  
+  JsonObject system = doc.createNestedObject("system");
+  system["rssi"] = WiFi.RSSI();
+  system["freeHeap"] = ESP.getFreeHeap();
+  system["uptime"] = millis() / 1000;
+  system["cpuFreq"] = ESP.getCpuFreqMHz();
+  system["buffered"] = metrics.bufferedMessagesCount;
+  system["sentFromBuffer"] = metrics.sentFromBufferCount;
+  system["wifiReconnects"] = metrics.wifiReconnectCount;
+  system["mqttReconnects"] = metrics.mqttReconnectCount;
+  
+  String payload;
+  serializeJson(doc, payload);
+  
+  if(connectionState != FULLY_CONNECTED) {
+    DEBUG_PRINTLN("[MQTT] Déconnecté, ajout au buffer");
+    addToBuffer(topic, payload);
+  } else {
+    bool ok = mqtt.publish(topic.c_str(), payload.c_str());
+    
+    if (ok) {
+      DEBUG_PRINTF("[MQTT] Publish ✅ OK : %s\n", payload.c_str());
+      
+      if (!messageBuffer.empty()) {
+        sendBufferedMessages();
+      }
+    } else {
+      DEBUG_PRINTLN("[MQTT] ❌ Publish échoué, ajout au buffer");
+      metrics.failedPublishCount++;
+      addToBuffer(topic, payload);
+    }
+  }
+}
+
+void publishStatus() {
+  String topic = "devices/" + String(IOTHUB_DEVICE_ID) + "/messages/events/";
+  
+  StaticJsonDocument<512> doc;
+  
+  doc["event"] = "status";
+  doc["firmware"] = config.firmwareVersion;
+  doc["uptime"] = millis() / 1000;
+  doc["detectionEnabled"] = config.detectionEnabled;
+  doc["cooldown"] = config.cooldownPeriod;
+  doc["detectionCount"] = metrics.detectionCount;
+  
+  JsonObject system = doc.createNestedObject("system");
+  system["rssi"] = WiFi.RSSI();
+  system["freeHeap"] = ESP.getFreeHeap();
+  system["buffered"] = messageBuffer.size();
+  system["wifiReconnects"] = metrics.wifiReconnectCount;
+  system["mqttReconnects"] = metrics.mqttReconnectCount;
+  system["failedPublishes"] = metrics.failedPublishCount;
+  
+  String payload;
+  serializeJson(doc, payload);
+  
+  if (connectionState == FULLY_CONNECTED) {
+    bool ok = mqtt.publish(topic.c_str(), payload.c_str());
+    DEBUG_PRINTF("[STATUS] Publish %s\n", ok ? "✅ OK" : "❌ FAIL");
+  }
+}
 
 void publishTwinReported() {
   String topic = "$iothub/twin/PATCH/properties/reported/?$rid=" + String(twinRequestId++);
   
   StaticJsonDocument<512> doc;
-  doc["firmware"] = FIRMWARE_VERSION;
+  doc["firmware"] = config.firmwareVersion;
   doc["uptime"] = millis() / 1000;
-  doc["detectionEnabled"] = detectionEnabled;
-  doc["cooldown"] = cooldownPeriod;
-  doc["detectionCount"] = detectionCount;
+  doc["detectionEnabled"] = config.detectionEnabled;
+  doc["cooldown"] = config.cooldownPeriod;
+  doc["detectionCount"] = metrics.detectionCount;
   
   JsonObject system = doc.createNestedObject("system");
   system["rssi"] = WiFi.RSSI();
@@ -258,37 +396,41 @@ void publishTwinReported() {
   String payload;
   serializeJson(doc, payload);
   
-  if (mqtt.connected()) {
+  if (connectionState == FULLY_CONNECTED) {
     bool ok = mqtt.publish(topic.c_str(), payload.c_str());
-    Serial.printf("[TWIN] Reported %s\n", ok ? "✅ OK" : "❌ FAIL");
+    DEBUG_PRINTF("[TWIN] Reported %s\n", ok ? "✅ OK" : "❌ FAIL");
   }
 }
 
 void requestTwinGet() {
   String topic = "$iothub/twin/GET/?$rid=" + String(twinRequestId++);
   
-  if (mqtt.connected()) {
+  if (connectionState == FULLY_CONNECTED) {
     bool ok = mqtt.publish(topic.c_str(), "");
-    Serial.printf("[TWIN] GET request %s\n", ok ? "✅ OK" : "❌ FAIL");
+    DEBUG_PRINTF("[TWIN] GET request %s\n", ok ? "✅ OK" : "❌ FAIL");
   }
 }
 
+// ============================================
+// FONCTIONS DEVICE TWIN
+// ============================================
+
 void handleTwinDesired(const JsonObject& doc) {
-  Serial.println("\n╔═══════════════════════════════════════╗");
-  Serial.println("║  🔄 DEVICE TWIN DESIRED UPDATE       ║");
-  Serial.println("╚═══════════════════════════════════════╝");
+  DEBUG_PRINTLN("\n╔═══════════════════════════════════════╗");
+  DEBUG_PRINTLN("║  🔄 DEVICE TWIN DESIRED UPDATE       ║");
+  DEBUG_PRINTLN("╚═══════════════════════════════════════╝");
   
   bool changed = false;
   
   if (doc.containsKey("detectionEnabled")) {
     bool newValue = doc["detectionEnabled"];
-    if (newValue != detectionEnabled) {
-      detectionEnabled = newValue;
-      Serial.printf("[TWIN] detectionEnabled: %s → %s\n", 
+    if (newValue != config.detectionEnabled) {
+      config.detectionEnabled = newValue;
+      DEBUG_PRINTF("[TWIN] detectionEnabled: %s → %s\n", 
                     !newValue ? "true" : "false",
                     newValue ? "true" : "false");
       
-      if (detectionEnabled) {
+      if (config.detectionEnabled) {
         digitalWrite(LED_PIN, HIGH);
         delay(200);
         digitalWrite(LED_PIN, LOW);
@@ -307,96 +449,23 @@ void handleTwinDesired(const JsonObject& doc) {
   
   if (doc.containsKey("cooldown")) {
     unsigned long newValue = doc["cooldown"];
-    if (newValue >= 1000 && newValue <= 60000 && newValue != cooldownPeriod) {
-      Serial.printf("[TWIN] cooldown: %lu ms → %lu ms\n", 
-                    cooldownPeriod, newValue);
-      cooldownPeriod = newValue;
+    if (newValue >= 1000 && newValue <= 60000 && newValue != config.cooldownPeriod) {
+      DEBUG_PRINTF("[TWIN] cooldown: %lu ms → %lu ms\n", 
+                    config.cooldownPeriod, newValue);
+      config.cooldownPeriod = newValue;
       changed = true;
     }
   }
   
   if (changed) {
-    Serial.println("[TWIN] ✅ Configuration mise à jour depuis Azure");
+    DEBUG_PRINTLN("[TWIN] ✅ Configuration mise à jour depuis Azure");
+    saveConfig();
     publishTwinReported();
   } else {
-    Serial.println("[TWIN] ℹ️ Aucun changement nécessaire");
+    DEBUG_PRINTLN("[TWIN] ℹ️ Aucun changement nécessaire");
   }
   
-  Serial.println("───────────────────────────────────────");
-}
-
-// ============================================
-// FONCTIONS PUBLICATION
-// ============================================
-
-void publishStatus() {
-  String topic = "devices/" + String(IOTHUB_DEVICE_ID) + "/messages/events/";
-  
-  String payload = "{";
-  payload += "\"event\":\"status\",";
-  payload += "\"firmware\":\"" + String(FIRMWARE_VERSION) + "\",";
-  payload += "\"uptime\":" + String(millis() / 1000) + ",";
-  payload += "\"detectionEnabled\":" + String(detectionEnabled ? "true" : "false") + ",";
-  payload += "\"cooldown\":" + String(cooldownPeriod) + ",";
-  payload += "\"detectionCount\":" + String(detectionCount) + ",";
-  payload += "\"system\":{";
-  payload += "\"rssi\":" + String(WiFi.RSSI()) + ",";
-  payload += "\"freeHeap\":" + String(ESP.getFreeHeap()) + ",";
-  payload += "\"buffered\":" + String(messageBuffer.size());
-  payload += "}";
-  payload += "}";
-  
-  if (mqtt.connected()) {
-    bool ok = mqtt.publish(topic.c_str(), payload.c_str());
-    Serial.printf("[STATUS] Publish %s\n", ok ? "✅ OK" : "❌ FAIL");
-  }
-}
-
-void publishDetectionJson(){
-  String topic = "devices/" + String(IOTHUB_DEVICE_ID) + "/messages/events/";
-  
-  String payload = "{";
-  payload += "\"event\":\"motion\",";
-  payload += "\"count\":" + String(detectionCount) + ",";
-  payload += "\"ts\":" + String(millis()) + ",";
-  payload += "\"config\":{";
-  payload += "\"detectionEnabled\":" + String(detectionEnabled ? "true" : "false") + ",";
-  payload += "\"cooldown\":" + String(cooldownPeriod) + ",";
-  payload += "\"firmware\":\"" + String(FIRMWARE_VERSION) + "\"";
-  payload += "},";
-  payload += "\"system\":{";
-  payload += "\"rssi\":" + String(WiFi.RSSI()) + ",";
-  payload += "\"freeHeap\":" + String(ESP.getFreeHeap()) + ",";
-  payload += "\"uptime\":" + String(millis() / 1000) + ",";
-  payload += "\"cpuFreq\":" + String(ESP.getCpuFreqMHz()) + ",";
-  payload += "\"buffered\":" + String(bufferedMessagesCount) + ",";
-  payload += "\"sentFromBuffer\":" + String(sentFromBufferCount);
-  payload += "}";
-  payload += "}";
-  
-  if(!mqtt.connected()) {
-    Serial.println("[MQTT] Déconnecté. Tentative de reconnexion...");
-    
-    if (connectIoTHub()) {
-      Serial.println("[MQTT] ✅ Reconnecté !");
-      sendBufferedMessages();
-      
-      bool ok = mqtt.publish(topic.c_str(), payload.c_str());
-      Serial.printf("[MQTT] Publish %s : %s\n", ok ? "✅ OK" : "❌ FAIL", payload.c_str());
-      
-    } else {
-      Serial.println("[MQTT] ❌ Reconnexion échouée");
-      addToBuffer(topic, payload);
-    }
-    
-  } else {
-    bool ok = mqtt.publish(topic.c_str(), payload.c_str());
-    Serial.printf("[MQTT] Publish %s : %s\n", ok ? "✅ OK" : "❌ FAIL", payload.c_str());
-    
-    if (ok && !messageBuffer.empty()) {
-      sendBufferedMessages();
-    }
-  }
+  DEBUG_PRINTLN("───────────────────────────────────────");
 }
 
 // ============================================
@@ -413,16 +482,16 @@ void messageCallback(char* topic, byte* payload, unsigned int length) {
   
   // TRAITER DEVICE TWIN DESIRED
   if (topicStr.startsWith("$iothub/twin/PATCH/properties/desired/")) {
-    Serial.println("\n╔═══════════════════════════════════════╗");
-    Serial.println("║  📨 TWIN DESIRED PATCH REÇU !         ║");
-    Serial.println("╚═══════════════════════════════════════╝");
-    Serial.printf("[TWIN] Payload: %s\n", message.c_str());
+    DEBUG_PRINTLN("\n╔═══════════════════════════════════════╗");
+    DEBUG_PRINTLN("║  📨 TWIN DESIRED PATCH REÇU !         ║");
+    DEBUG_PRINTLN("╚═══════════════════════════════════════╝");
+    DEBUG_PRINTF("[TWIN] Payload: %s\n", message.c_str());
     
     StaticJsonDocument<512> doc;
     DeserializationError error = deserializeJson(doc, message);
     
     if (error) {
-      Serial.printf("[TWIN] ❌ Erreur parsing JSON: %s\n", error.c_str());
+      DEBUG_PRINTF("[TWIN] ❌ Erreur parsing JSON: %s\n", error.c_str());
       return;
     }
     
@@ -432,15 +501,15 @@ void messageCallback(char* topic, byte* payload, unsigned int length) {
   
   // TRAITER TWIN RESPONSE
   if (topicStr.startsWith("$iothub/twin/res/")) {
-    Serial.println("\n╔═══════════════════════════════════════╗");
-    Serial.println("║  📋 TWIN GET RESPONSE REÇUE !         ║");
-    Serial.println("╚═══════════════════════════════════════╝");
+    DEBUG_PRINTLN("\n╔═══════════════════════════════════════╗");
+    DEBUG_PRINTLN("║  📋 TWIN GET RESPONSE REÇUE !         ║");
+    DEBUG_PRINTLN("╚═══════════════════════════════════════╝");
     
     int statusStart = topicStr.indexOf("/res/") + 5;
     int statusEnd = topicStr.indexOf("/", statusStart);
     String statusCode = topicStr.substring(statusStart, statusEnd);
     
-    Serial.printf("[TWIN] Status Code: %s\n", statusCode.c_str());
+    DEBUG_PRINTF("[TWIN] Status Code: %s\n", statusCode.c_str());
     
     if (statusCode == "200") {
       StaticJsonDocument<1024> doc;
@@ -449,7 +518,7 @@ void messageCallback(char* topic, byte* payload, unsigned int length) {
       if (!error) {
         if (doc.containsKey("desired")) {
           JsonObject desired = doc["desired"];
-          Serial.println("[TWIN] Propriétés desired trouvées:");
+          DEBUG_PRINTLN("[TWIN] Propriétés desired trouvées:");
           serializeJsonPretty(desired, Serial);
           Serial.println();
           
@@ -458,53 +527,55 @@ void messageCallback(char* topic, byte* payload, unsigned int length) {
       }
     }
     
-    Serial.println("───────────────────────────────────────");
+    DEBUG_PRINTLN("───────────────────────────────────────");
     return;
   }
   
   // TRAITER C2D MESSAGES
   if (topicStr.startsWith("devices/")) {
-    Serial.println("\n╔═══════════════════════════════════════╗");
-    Serial.println("║  📨 MESSAGE C2D REÇU DEPUIS AZURE !   ║");
-    Serial.println("╚═══════════════════════════════════════╝");
+    DEBUG_PRINTLN("\n╔═══════════════════════════════════════╗");
+    DEBUG_PRINTLN("║  📨 MESSAGE C2D REÇU DEPUIS AZURE !   ║");
+    DEBUG_PRINTLN("╚═══════════════════════════════════════╝");
     
-    Serial.printf("[C2D] Payload: %s\n", message.c_str());
+    DEBUG_PRINTF("[C2D] Payload: %s\n", message.c_str());
     
     StaticJsonDocument<256> doc;
     DeserializationError error = deserializeJson(doc, message);
     
     if (error) {
-      Serial.printf("[C2D] ❌ Erreur parsing JSON: %s\n", error.c_str());
+      DEBUG_PRINTF("[C2D] ❌ Erreur parsing JSON: %s\n", error.c_str());
       return;
     }
     
     const char* command = doc["command"];
     
     if (command == nullptr) {
-      Serial.println("[C2D] ❌ Aucune commande trouvée");
+      DEBUG_PRINTLN("[C2D] ❌ Aucune commande trouvée");
       return;
     }
     
-    Serial.printf("[C2D] 🎯 Commande: %s\n", command);
+    DEBUG_PRINTF("[C2D] 🎯 Commande: %s\n", command);
     
     if (strcmp(command, "enable") == 0) {
-      detectionEnabled = true;
-      Serial.println("[C2D] ✅ Détection ACTIVÉE");
+      config.detectionEnabled = true;
+      DEBUG_PRINTLN("[C2D] ✅ Détection ACTIVÉE");
       digitalWrite(LED_PIN, HIGH);
       delay(200);
       digitalWrite(LED_PIN, LOW);
+      saveConfig();
       publishStatus();
       publishTwinReported();
       
     } else if (strcmp(command, "disable") == 0) {
-      detectionEnabled = false;
-      Serial.println("[C2D] ⛔ Détection DÉSACTIVÉE");
+      config.detectionEnabled = false;
+      DEBUG_PRINTLN("[C2D] ⛔ Détection DÉSACTIVÉE");
       for (int i = 0; i < 3; i++) {
         digitalWrite(LED_PIN, HIGH);
         delay(100);
         digitalWrite(LED_PIN, LOW);
         delay(100);
       }
+      saveConfig();
       publishStatus();
       publishTwinReported();
       
@@ -512,145 +583,92 @@ void messageCallback(char* topic, byte* payload, unsigned int length) {
       if (doc.containsKey("value")) {
         unsigned long newCooldown = doc["value"];
         if (newCooldown >= 1000 && newCooldown <= 60000) {
-          cooldownPeriod = newCooldown;
-          Serial.printf("[C2D] ✅ Cooldown changé: %lu ms\n", cooldownPeriod);
+          config.cooldownPeriod = newCooldown;
+          DEBUG_PRINTF("[C2D] ✅ Cooldown changé: %lu ms\n", config.cooldownPeriod);
+          saveConfig();
           publishStatus();
           publishTwinReported();
         }
       }
       
     } else if (strcmp(command, "getStatus") == 0) {
-      Serial.println("[C2D] 📊 Envoi du statut...");
+      DEBUG_PRINTLN("[C2D] 📊 Envoi du statut...");
       publishStatus();
       publishTwinReported();
       
     } else if (strcmp(command, "getTwin") == 0) {
-      Serial.println("[C2D] 🔍 Demande du Device Twin...");
+      DEBUG_PRINTLN("[C2D] 🔍 Demande du Device Twin...");
       requestTwinGet();
       
     } else if (strcmp(command, "reboot") == 0) {
-      Serial.println("[C2D] 🔄 REDÉMARRAGE dans 3 secondes...");
+      DEBUG_PRINTLN("[C2D] 🔄 REDÉMARRAGE dans 3 secondes...");
       delay(3000);
       ESP.restart();
       
     } else if (strcmp(command, "clearBuffer") == 0) {
       messageBuffer.clear();
-      Serial.println("[C2D] ✅ Buffer vidé");
+      DEBUG_PRINTLN("[C2D] ✅ Buffer vidé");
       publishStatus();
       
     } else {
-      Serial.printf("[C2D] ❌ Commande inconnue: %s\n", command);
+      DEBUG_PRINTF("[C2D] ❌ Commande inconnue: %s\n", command);
     }
     
-    Serial.println("───────────────────────────────────────");
+    DEBUG_PRINTLN("───────────────────────────────────────");
   }
 }
 
 // ============================================
-// FONCTIONS WIFI
+// FONCTIONS CONNEXION (MACHINE À ÉTATS)
 // ============================================
 
-bool ensureWiFiConnected() {
-  if (WiFi.status() == WL_CONNECTED) {
-    return true;
-  }
-  
-  Serial.println("[WiFi] ⚠️ WiFi déconnecté, reconnexion...");
-  
-  WiFi.disconnect();
-  delay(100);
-  
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  
-  int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
-    delay(500);
-    Serial.print(".");
-    attempts++;
-    esp_task_wdt_reset();
-  }
-  
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("\n[WiFi] ❌ Impossible de reconnecter le WiFi");
-    return false;
-  }
-  
-  Serial.printf("\n[WiFi] ✅ WiFi reconnecté, IP: %s\n", WiFi.localIP().toString().c_str());
-  Serial.printf("[WiFi] RSSI: %d dBm\n", WiFi.RSSI());
-  
-  delay(2000);
-  
-  return true;
-}
-
-void connectWiFi(){
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial.printf("[WiFi] Connexion à %s ...\n", WIFI_SSID);
-  while(WiFi.status()!=WL_CONNECTED){ 
-    delay(500); 
-    Serial.print("."); 
-    esp_task_wdt_reset();
-  }
-  Serial.printf("\n[WiFi] Connecté, IP: %s\n", WiFi.localIP().toString().c_str());
-  Serial.printf("[WiFi] RSSI: %d dBm\n", WiFi.RSSI());
-}
-
-// ============================================
-// FONCTIONS CONNEXION AZURE
-// ============================================
-
-bool connectIoTHub(){
-  if (!ensureWiFiConnected()) {
-    return false;
-  }
-  
-  Serial.println("[TLS] Configuration du certificat Azure IoT Hub...");
+void connectMQTT() {
+  DEBUG_PRINTLN("[TLS] Configuration du certificat Azure IoT Hub...");
   tlsClient.setCACert(azure_root_ca);
   
   mqtt.setCallback(messageCallback);
   mqtt.setServer(IOTHUB_HOST, 8883);
 
-  Serial.println("[NTP] Tentative de synchronisation de l'heure...");
+  DEBUG_PRINTLN("[NTP] Synchronisation de l'heure...");
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
   if (!waitForTime()) {
-      Serial.println("[NTP] ❌ Échec de la synchronisation.");
-      return false;
+      DEBUG_PRINTLN("[NTP] ❌ Échec de la synchronisation.");
+      return;
   } else {
       time_t now;
       time(&now);
-      Serial.printf("[NTP] ✅ Heure synchronisée : %s", ctime(&now));
+      DEBUG_PRINTF("[NTP] ✅ Heure synchronisée : %s", ctime(&now));
   }
 
   String sas = buildSasToken(IOTHUB_HOST, IOTHUB_DEVICE_ID, IOTHUB_DEVICE_KEY_BASE64, 3600);
   String clientId = IOTHUB_DEVICE_ID;
   String username = String(IOTHUB_HOST) + "/" + IOTHUB_DEVICE_ID + "/?api-version=2020-09-30";
 
-  Serial.println("\n--- Informations de Connexion MQTT ---");
-  Serial.println("Client ID: " + clientId);
-  Serial.println("Username: " + username);
-  Serial.println("SAS Token: " + sas);
-  Serial.println("-------------------------------------\n");
+  DEBUG_PRINTLN("\n--- Informations de Connexion MQTT ---");
+  DEBUG_PRINTLN("Client ID: " + clientId);
+  DEBUG_PRINTLN("Username: " + username);
+  DEBUG_PRINTLN("SAS Token: " + sas);
+  DEBUG_PRINTLN("-------------------------------------\n");
 
-  Serial.println("[MQTT] Connexion à IoT Hub...");
+  DEBUG_PRINTLN("[MQTT] Connexion à IoT Hub...");
   if (!mqtt.connect(clientId.c_str(), username.c_str(), sas.c_str())) {
-    Serial.printf("[MQTT] ❌ Échec, rc=%d\n", mqtt.state());
-    return false;
+    DEBUG_PRINTF("[MQTT] ❌ Échec, rc=%d\n", mqtt.state());
+    return;
   }
   
-  Serial.println("[MQTT] ✅ Connecté à IoT Hub");
+  DEBUG_PRINTLN("[MQTT] ✅ Connecté à IoT Hub");
   
   String subscribeC2D = "devices/" + String(IOTHUB_DEVICE_ID) + "/messages/devicebound/#";
   if (mqtt.subscribe(subscribeC2D.c_str())) {
-    Serial.println("[C2D] ✅ Abonné aux messages Cloud-to-Device");
+    DEBUG_PRINTLN("[C2D] ✅ Abonné aux messages Cloud-to-Device");
   }
   
   if (mqtt.subscribe("$iothub/twin/PATCH/properties/desired/#")) {
-    Serial.println("[TWIN] ✅ Abonné aux PATCH desired");
+    DEBUG_PRINTLN("[TWIN] ✅ Abonné aux PATCH desired");
   }
   
   if (mqtt.subscribe("$iothub/twin/res/#")) {
-    Serial.println("[TWIN] ✅ Abonné aux réponses twin");
+    DEBUG_PRINTLN("[TWIN] ✅ Abonné aux réponses twin");
   }
   
   delay(1000);
@@ -658,8 +676,82 @@ bool connectIoTHub(){
   requestTwinGet();
   publishTwinReported();
   publishStatus();
+}
+
+void handleConnection() {
+  unsigned long now = millis();
   
-  return true;
+  switch(connectionState) {
+    case DISCONNECTED:
+      if (now - lastConnectionAttempt > CONNECTION_RETRY_INTERVAL) {
+        DEBUG_PRINTLN("[CONN] ⚡ Tentative de connexion WiFi...");
+        WiFi.mode(WIFI_STA);
+        WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+        connectionState = CONNECTING_WIFI;
+        lastConnectionAttempt = now;
+      }
+      break;
+      
+    case CONNECTING_WIFI:
+      if (WiFi.status() == WL_CONNECTED) {
+        DEBUG_PRINTF("\n[WiFi] ✅ Connecté, IP: %s\n", WiFi.localIP().toString().c_str());
+        DEBUG_PRINTF("[WiFi] RSSI: %d dBm\n", WiFi.RSSI());
+        connectionState = WIFI_CONNECTED;
+        lastConnectionAttempt = now;
+      } else if (now - lastConnectionAttempt > 20000) {
+        DEBUG_PRINTLN("\n[WiFi] ❌ Timeout");
+        WiFi.disconnect();
+        connectionState = DISCONNECTED;
+        metrics.wifiReconnectCount++;
+      }
+      break;
+      
+    case WIFI_CONNECTED:
+      if (WiFi.status() != WL_CONNECTED) {
+        DEBUG_PRINTLN("[WiFi] ⚠️ Déconnecté");
+        connectionState = DISCONNECTED;
+      } else if (!mqtt.connected()) {
+        DEBUG_PRINTLN("[MQTT] Tentative de connexion...");
+        connectMQTT();
+        connectionState = CONNECTING_MQTT;
+        lastConnectionAttempt = now;
+      }
+      break;
+      
+    case CONNECTING_MQTT:
+      if (mqtt.connected()) {
+        DEBUG_PRINTLN("[MQTT] ✅ État: FULLY_CONNECTED");
+        connectionState = FULLY_CONNECTED;
+        
+        // Clignotement LED pour signaler la connexion complète
+        for (int i = 0; i < 3; i++) {
+          digitalWrite(LED_PIN, HIGH);
+          delay(100);
+          digitalWrite(LED_PIN, LOW);
+          delay(100);
+        }
+        
+        // Envoyer les messages en attente
+        if (!messageBuffer.empty()) {
+          sendBufferedMessages();
+        }
+      } else if (now - lastConnectionAttempt > 15000) {
+        DEBUG_PRINTLN("[MQTT] ❌ Timeout");
+        connectionState = WIFI_CONNECTED;
+        metrics.mqttReconnectCount++;
+      }
+      break;
+      
+    case FULLY_CONNECTED:
+      if (!mqtt.connected()) {
+        DEBUG_PRINTLN("[MQTT] ⚠️ Déconnecté");
+        connectionState = WIFI_CONNECTED;
+      } else if (WiFi.status() != WL_CONNECTED) {
+        DEBUG_PRINTLN("[WiFi] ⚠️ Déconnecté");
+        connectionState = DISCONNECTED;
+      }
+      break;
+  }
 }
 
 // ============================================
@@ -679,29 +771,19 @@ void setup() {
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
   
-  Serial.println("[WDT] Configuration du watchdog...");
+  DEBUG_PRINTLN("[WDT] Configuration du watchdog...");
   esp_task_wdt_init(WDT_TIMEOUT, true);
   esp_task_wdt_add(NULL);
   
-  bootTime = millis();
+  DEBUG_PRINTLN("[CONFIG] Chargement de la configuration...");
+  loadConfig();
   
-  connectWiFi();
+  metrics.bootTime = millis();
   
-  if (!connectIoTHub()) {
-    Serial.println("[AZURE] ❌ Échec de la connexion initiale");
-    Serial.println("[SYSTEM] Redémarrage dans 10 secondes...");
-    delay(10000);
-    ESP.restart();
-  }
-  
-  for (int i = 0; i < 3; i++) {
-    digitalWrite(LED_PIN, HIGH);
-    delay(100);
-    digitalWrite(LED_PIN, LOW);
-    delay(100);
-  }
-  
-  Serial.println("\n[SYSTEM] ✅ Démarrage terminé, en attente de détections...\n");
+  DEBUG_PRINTLN("[SYSTEM] ✅ Initialisation terminée\n");
+  DEBUG_PRINTF("[SYSTEM] Mode DEBUG: %s\n", DEBUG_MODE ? "ACTIVÉ" : "DÉSACTIVÉ");
+  DEBUG_PRINTF("[SYSTEM] RAM libre: %d bytes\n", ESP.getFreeHeap());
+  DEBUG_PRINTLN("\n[CONN] Démarrage de la connexion...\n");
 }
 
 // ============================================
@@ -711,39 +793,32 @@ void setup() {
 void loop() {
   esp_task_wdt_reset();
   
-  if (!mqtt.connected()) {
-    Serial.println("[MQTT] Déconnecté, tentative de reconnexion...");
-    if (connectIoTHub()) {
-      Serial.println("[MQTT] ✅ Reconnecté");
-      sendBufferedMessages();
-    } else {
-      Serial.println("[MQTT] ❌ Reconnexion échouée, retry dans 5s");
-      delay(5000);
-    }
+  // Gestion de la connexion (non-bloquante)
+  handleConnection();
+  
+  // Traiter les messages MQTT seulement si connecté
+  if (connectionState == FULLY_CONNECTED) {
+    mqtt.loop();
   }
   
-  mqtt.loop();
-  
-  if (millis() - lastWiFiCheck > WIFI_CHECK_INTERVAL) {
-    lastWiFiCheck = millis();
-    ensureWiFiConnected();
-  }
-  
+  // Vérifier et envoyer les messages en buffer périodiquement
   if (millis() - lastBufferCheck > BUFFER_CHECK_INTERVAL) {
     lastBufferCheck = millis();
-    if (!messageBuffer.empty() && mqtt.connected()) {
+    if (!messageBuffer.empty() && connectionState == FULLY_CONNECTED) {
       sendBufferedMessages();
     }
   }
   
+  // Mise à jour périodique du Device Twin
   if (millis() - lastTwinUpdate > TWIN_UPDATE_INTERVAL) {
     lastTwinUpdate = millis();
-    if (mqtt.connected()) {
+    if (connectionState == FULLY_CONNECTED) {
       publishTwinReported();
     }
   }
   
-  if (!detectionEnabled) {
+  // === LOGIQUE PIR (FONCTIONNE MÊME SI DÉCONNECTÉ) ===
+  if (!config.detectionEnabled) {
     delay(100);
     return;
   }
@@ -751,44 +826,46 @@ void loop() {
   bool currentState = digitalRead(PIR_PIN);
   unsigned long now = millis();
   
-  if (currentState == HIGH && lastPirState == LOW) {
-    if ((now - lastStateChangeTime) > DEBOUNCE_DELAY) {
-      if (!motionInProgress) {
-        if ((now - lastValidDetectionTime) > cooldownPeriod) {
-          motionInProgress = true;
-          detectionCount++;
-          lastValidDetectionTime = now;
+  // Détection du front montant (début de mouvement)
+  if (currentState == HIGH && pirState.lastState == LOW) {
+    if ((now - pirState.lastStateChangeTime) > DEBOUNCE_DELAY) {
+      if (!pirState.motionInProgress) {
+        if ((now - metrics.lastValidDetectionTime) > config.cooldownPeriod) {
+          pirState.motionInProgress = true;
+          metrics.detectionCount++;
+          metrics.lastValidDetectionTime = now;
           
-          Serial.println("\n╔═══════════════════════════════════════╗");
-          Serial.printf("║  🚨 DÉTECTION #%-4d                  ║\n", detectionCount);
-          Serial.println("╚═══════════════════════════════════════╝");
+          DEBUG_PRINTLN("\n╔═══════════════════════════════════════╗");
+          DEBUG_PRINTF("║  🚨 DÉTECTION #%-4d                  ║\n", metrics.detectionCount);
+          DEBUG_PRINTLN("╚═══════════════════════════════════════╝");
           
           digitalWrite(LED_PIN, HIGH);
           
           publishDetectionJson();
           
-          Serial.println("───────────────────────────────────────\n");
+          DEBUG_PRINTLN("───────────────────────────────────────\n");
         } else {
-          Serial.printf("[PIR] ⏳ Cooldown actif (%lu ms restant)\n", 
-                        cooldownPeriod - (now - lastValidDetectionTime));
+          DEBUG_PRINTF("[PIR] ⏳ Cooldown actif (%lu ms restant)\n", 
+                        config.cooldownPeriod - (now - metrics.lastValidDetectionTime));
         }
       }
     }
-    lastStateChangeTime = now;
+    pirState.lastStateChangeTime = now;
   }
   
-  if (currentState == LOW && lastPirState == HIGH) {
-    if ((now - lastStateChangeTime) > DEBOUNCE_DELAY) {
-      if (motionInProgress) {
-        motionInProgress = false;
+  // Détection du front descendant (fin de mouvement)
+  if (currentState == LOW && pirState.lastState == HIGH) {
+    if ((now - pirState.lastStateChangeTime) > DEBOUNCE_DELAY) {
+      if (pirState.motionInProgress) {
+        pirState.motionInProgress = false;
         digitalWrite(LED_PIN, LOW);
-        Serial.println("[PIR] ✅ Mouvement terminé");
+        DEBUG_PRINTLN("[PIR] ✅ Mouvement terminé");
       }
     }
-    lastStateChangeTime = now;
+    pirState.lastStateChangeTime = now;
   }
   
-  lastPirState = currentState;
+  pirState.lastState = currentState;
   
   delay(50);
 }
