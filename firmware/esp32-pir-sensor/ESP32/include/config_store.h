@@ -1,50 +1,41 @@
 // include/config_store.h
-#pragma once
+#ifndef CONFIG_STORE_H
+#define CONFIG_STORE_H
+
 #include <Arduino.h>
 
-// Limites de cooldown (ms)
-static const unsigned long COOLDOWN_MIN_MS = 1000;
-static const unsigned long COOLDOWN_MAX_MS = 60000;
+// ============================================
+// Configuration Store (LittleFS persistence)
+// ============================================
 
 /**
- * Initialise le module de configuration et charge depuis la flash (Preferences)
+ * Initialise le module de configuration
+ * Charge les valeurs depuis LittleFS
  */
 void configInit();
 
 /**
- * Sauvegarde la configuration courante dans la flash
+ * Active/désactive la détection PIR
+ * @param enabled true pour activer, false pour désactiver
  */
-void saveConfiguration();
+void configSetDetectionEnabled(bool enabled);
 
 /**
- * Retourne l'Ã©tat de la dÃ©tection (activÃ©e/dÃ©sactivÃ©e)
+ * Définit le cooldown entre détections (millisecondes)
+ * @param cooldownMs Délai minimum entre 2 détections
  */
-bool getDetectionEnabled();
+void configSetCooldown(int cooldownMs);
 
 /**
- * Active/dÃ©sactive la dÃ©tection et persiste automatiquement
- * @param v true pour activer, false pour dÃ©sactiver
+ * Récupère l'état de la détection
+ * @return true si activé, false sinon
  */
-void setDetectionEnabled(bool v);
+bool configGetDetectionEnabled();
 
 /**
- * Retourne le cooldown actuel en millisecondes
+ * Récupère le cooldown actuel (millisecondes)
+ * @return Délai en ms
  */
-unsigned long getCooldownMs();
+int configGetCooldown();
 
-/**
- * Modifie le cooldown (entre COOLDOWN_MIN_MS et COOLDOWN_MAX_MS)
- * @param v Nouveau cooldown en ms
- * @return true si la valeur est valide et a Ã©tÃ© appliquÃ©e
- */
-bool setCooldownMs(unsigned long v);
-
-/**
- * Retourne le nombre total de dÃ©tections depuis le dÃ©marrage
- */
-int getDetectionCount();
-
-/**
- * Modifie le compteur de dÃ©tections et persiste
- */
-void setDetectionCount(int v);
+#endif

@@ -1,73 +1,104 @@
 // src/config_store.cpp
 #include "config_store.h"
-#include <Preferences.h>
+#include <LittleFS.h>
 
-static Preferences prefs;
+// ============================================
+// VARIABLES GLOBALES
+// ============================================
 
-static bool          s_detectionEnabled = true;
-static unsigned long s_cooldownMs       = 3000;
-static int           s_detectionCount   = 0;
+static bool detectionEnabled = true;
+static int cooldownMs = 5000;
+
+// ============================================
+// FONCTIONS PRIVÉES
+// ============================================
+
+/**
+ * Sauvegarde la configuration dans LittleFS
+ */
+static void saveConfig() {
+  if (!LittleFS.begin(true)) {
+    Serial.println("[Config] ⚠️ Impossible d'initialiser LittleFS");
+    return;
+  }
+  
+  File f = LittleFS.open("/config.txt", "w");
+  if (!f) {
+    Serial.println("[Config] ⚠️ Impossible d'ouvrir le fichier de config");
+    return;
+  }
+  
+  f.printf("detectionEnabled=%d\n", detectionEnabled ? 1 : 0);
+  f.printf("cooldownMs=%d\n", cooldownMs);
+  f.close();
+  
+  Serial.println("[Config] 💾 Configuration sauvegardée");
+}
+
+/**
+ * Charge la configuration depuis LittleFS
+ */
+static void loadConfig() {
+  if (!LittleFS.begin(true)) {
+    Serial.println("[Config] ⚠️ LittleFS non disponible, config par défaut");
+    return;
+  }
+  
+  if (!LittleFS.exists("/config.txt")) {
+    Serial.println("[Config] ℹ️  Pas de config sauvegardée, valeurs par défaut");
+    return;
+  }
+  
+  File f = LittleFS.open("/config.txt", "r");
+  if (!f) {
+    Serial.println("[Config] ⚠️ Impossible de lire le fichier de config");
+    return;
+  }
+  
+  while (f.available()) {
+    String line = f.readStringUntil('\n');
+    line.trim();
+    
+    if (line.startsWith("detectionEnabled=")) {
+      int value = line.substring(17).toInt();
+      detectionEnabled = (value == 1);
+      Serial.printf("[Config] Chargé: detectionEnabled=%s\n", detectionEnabled ? "true" : "false");
+    }
+    else if (line.startsWith("cooldownMs=")) {
+      cooldownMs = line.substring(11).toInt();
+      Serial.printf("[Config] Chargé: cooldownMs=%d\n", cooldownMs);
+    }
+  }
+  
+  f.close();
+  Serial.println("[Config] ✅ Configuration chargée");
+}
+
+// ============================================
+// FONCTIONS PUBLIQUES
+// ============================================
 
 void configInit() {
-  prefs.begin("pir-config", true); // Read-only mode
-  s_detectionEnabled = prefs.getBool("detEnabled", true);
-  s_cooldownMs       = prefs.getULong("cooldown", 3000UL);
-  s_detectionCount   = prefs.getInt("detCount", 0);
-  prefs.end();
-
-  // Validation des valeurs chargées
-  if (s_cooldownMs < COOLDOWN_MIN_MS || s_cooldownMs > COOLDOWN_MAX_MS) {
-    Serial.printf("[CONFIG] ⚠️ Invalid cooldown %lu, resetting to 3000ms\n", s_cooldownMs);
-    s_cooldownMs = 3000;
-  }
-
-  Serial.printf("[CONFIG] ✅ Loaded: detection=%s, cooldown=%lu ms, count=%d\n",
-    s_detectionEnabled ? "ON" : "OFF", s_cooldownMs, s_detectionCount);
+  Serial.println("[Config] Initialisation...");
+  loadConfig();
 }
 
-void saveConfiguration() {
-  prefs.begin("pir-config", false); // Read-write mode
-  prefs.putBool("detEnabled", s_detectionEnabled);
-  prefs.putULong("cooldown", s_cooldownMs);
-  prefs.putInt("detCount", s_detectionCount);
-  prefs.end();
-  Serial.println("[CONFIG] 💾 Saved to flash");
+void configSetDetectionEnabled(bool enabled) {
+  detectionEnabled = enabled;
+  saveConfig();
+  Serial.printf("[Config] detectionEnabled → %s\n", enabled ? "true" : "false");
 }
 
-bool getDetectionEnabled() { 
-  return s_detectionEnabled; 
+void configSetCooldown(int cooldown) {
+  cooldownMs = cooldown;
+  saveConfig();
+  Serial.printf("[Config] cooldownMs → %d\n", cooldownMs);
 }
 
-void setDetectionEnabled(bool v) {
-  if (s_detectionEnabled == v) return;
-  s_detectionEnabled = v;
-  saveConfiguration();
-  Serial.printf("[CONFIG] Detection %s\n", v ? "enabled" : "disabled");
+bool configGetDetectionEnabled() {
+  return detectionEnabled;
 }
 
-unsigned long getCooldownMs() { 
-  return s_cooldownMs; 
-}
-
-bool setCooldownMs(unsigned long v) {
-  if (v < COOLDOWN_MIN_MS || v > COOLDOWN_MAX_MS) {
-    Serial.printf("[CONFIG] ⚠️ Cooldown %lu out of range [%lu-%lu]\n", 
-      v, COOLDOWN_MIN_MS, COOLDOWN_MAX_MS);
-    return false;
-  }
-  if (s_cooldownMs == v) return true;
-  s_cooldownMs = v;
-  saveConfiguration();
-  Serial.printf("[CONFIG] Cooldown set to %lu ms\n", v);
-  return true;
-}
-
-int getDetectionCount() { 
-  return s_detectionCount; 
-}
-
-void setDetectionCount(int v) {
-  if (v == s_detectionCount) return;
-  s_detectionCount = v;
-  saveConfiguration();
+int configGetCooldown() {
+  return cooldownMs;
 }
