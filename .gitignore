@@ -64,6 +64,7 @@ bld/
 *.user
 *.userosscache
 *.sln.docstates
+*.sln
 
 # .NET
 *.dll
