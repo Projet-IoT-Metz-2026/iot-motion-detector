@@ -6,6 +6,7 @@
 #include <PubSubClient.h>
 #include <LittleFS.h>
 #include <ArduinoJson.h>
+#include <esp_task_wdt.h>
 #include "mbedtls/md.h"
 #include "mbedtls/base64.h"
 
@@ -51,8 +52,10 @@ static PubSubClient dpsMqttClient(dpsWifiClient);
 
 static String cachedHubHostname = "";
 static bool assignmentReceived = false;
+static bool assignmentPending = false;
 static String assignedHub = "";
 static String assignedDeviceId = "";
+static String operationId = "";
 
 // ============================================
 // FONCTIONS UTILITAIRES
@@ -72,8 +75,8 @@ String generateDpsSasToken() {
   
   // String to sign: {idScope}/registrations/{registrationId}\n{expiry}
   char stringToSign[256];
-  snprintf(stringToSign, sizeof(stringToSign), 
-           "%s%%2Fregistrations%%2F%s\n%ld",
+  snprintf(stringToSign, sizeof(stringToSign),
+           "%s/registrations/%s\n%ld",
            idScope, registrationId, expiry);
   
   // Decode device key (base64)
@@ -109,12 +112,13 @@ String generateDpsSasToken() {
     else encodedSig += c;
   }
   
-  // Format final du SAS Token pour DPS
+  // Format final du SAS Token pour DPS (sans skn pour symmetric key)
+  // NOTE: Le sr ne doit PAS être URL-encodé (contrairement à ce qu'on pensait)
   char sasToken[512];
   snprintf(sasToken, sizeof(sasToken),
-           "SharedAccessSignature sr=%s%%2Fregistrations%%2F%s&sig=%s&se=%ld&skn=registration",
+           "SharedAccessSignature sr=%s/registrations/%s&sig=%s&se=%ld",
            idScope, registrationId, encodedSig.c_str(), expiry);
-  
+
   return String(sasToken);
 }
 
@@ -123,33 +127,41 @@ String generateDpsSasToken() {
  */
 void dpsMqttCallback(char* topic, byte* payload, unsigned int length) {
   Serial.printf("[DPS] Message reçu sur topic: %s\n", topic);
-  
+
+  // Afficher la payload brute
+  Serial.print("[DPS] Payload: ");
+  for (unsigned int i = 0; i < length; i++) {
+    Serial.print((char)payload[i]);
+  }
+  Serial.println();
+
   // Parse JSON response
   StaticJsonDocument<1024> doc;
   DeserializationError error = deserializeJson(doc, payload, length);
-  
+
   if (error) {
     Serial.printf("[DPS] ❌ Erreur parsing JSON: %s\n", error.c_str());
     return;
   }
-  
+
   const char* status = doc["status"] | "";
-  const char* operationId = doc["operationId"] | "";
-  
+  const char* opId = doc["operationId"] | "";
+
   Serial.printf("[DPS] Status: %s\n", status);
-  
+
   // Si "assigned", récupérer le Hub
   if (strcmp(status, "assigned") == 0) {
     JsonObject regState = doc["registrationState"];
     if (regState) {
       const char* hub = regState["assignedHub"] | "";
       const char* devId = regState["deviceId"] | "";
-      
+
       if (strlen(hub) > 0) {
         assignedHub = String(hub);
         assignedDeviceId = String(devId);
         assignmentReceived = true;
-        
+        assignmentPending = false;
+
         Serial.println("[DPS] ✅ Assignment reçu !");
         Serial.printf("[DPS]    Hub: %s\n", hub);
         Serial.printf("[DPS]    DeviceId: %s\n", devId);
@@ -157,6 +169,11 @@ void dpsMqttCallback(char* topic, byte* payload, unsigned int length) {
     }
   } else if (strcmp(status, "assigning") == 0) {
     Serial.println("[DPS] ⏳ Assignment en cours...");
+    if (strlen(opId) > 0) {
+      operationId = String(opId);
+      assignmentPending = true;
+      Serial.printf("[DPS]    OperationId: %s\n", opId);
+    }
   } else {
     Serial.printf("[DPS] ⚠️  Status inattendu: %s\n", status);
   }
@@ -230,8 +247,10 @@ DpsAssignment dpsProvision() {
   
   // Reset variables
   assignmentReceived = false;
+  assignmentPending = false;
   assignedHub = "";
   assignedDeviceId = "";
+  operationId = "";
   
   // Configuration TLS
   dpsWifiClient.setCACert(DPS_ROOT_CA);
@@ -298,10 +317,32 @@ DpsAssignment dpsProvision() {
   
   // Attendre la réponse
   Serial.println("[DPS] ⏳ Attente de l'assignment...");
-  
+
   unsigned long startTime = millis();
+  unsigned long lastPoll = 0;
+  int ridCounter = 2; // $rid=1 était pour la requête PUT initiale
+
   while (!assignmentReceived && (millis() - startTime < DPS_TIMEOUT_MS)) {
     dpsMqttClient.loop();
+    esp_task_wdt_reset(); // Réinitialiser le watchdog pendant l'attente
+
+    // Si on est en mode "assigning", poller le statut toutes les 3 secondes
+    if (assignmentPending && operationId.length() > 0 && (millis() - lastPoll > 3000)) {
+      Serial.println("[DPS] 🔄 Polling du statut...");
+
+      char pollTopic[256];
+      snprintf(pollTopic, sizeof(pollTopic),
+               "$dps/registrations/GET/iotdps-get-operationstatus/?$rid=%d&operationId=%s",
+               ridCounter++, operationId.c_str());
+
+      if (dpsMqttClient.publish(pollTopic, "")) {
+        Serial.println("[DPS] ✅ Requête GET envoyée");
+        lastPoll = millis();
+      } else {
+        Serial.println("[DPS] ❌ Échec envoi GET");
+      }
+    }
+
     delay(100);
   }
   

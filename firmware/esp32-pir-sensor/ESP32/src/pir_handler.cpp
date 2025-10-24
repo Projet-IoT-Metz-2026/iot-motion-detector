@@ -17,6 +17,7 @@ static bool motionInProgress = false;
 static int detectionCount = 0;
 
 static const unsigned long DEBOUNCE_DELAY = 500;
+static PublishMotionFn publishCallback = nullptr;
 
 // ============================================
 // FONCTIONS PUBLIQUES
@@ -91,4 +92,15 @@ void pirLoop() {
   }
   
   lastPirState = currentState;
+}
+
+void pirResetMotion() {
+  motionInProgress = false;
+  digitalWrite(s_ledPin, LOW);
+  Serial.println("[PIR] État de mouvement réinitialisé");
+}
+
+void pirSetPublishCallback(PublishMotionFn cb) {
+  publishCallback = cb;
+  Serial.println("[PIR] Callback de publication enregistré");
 }

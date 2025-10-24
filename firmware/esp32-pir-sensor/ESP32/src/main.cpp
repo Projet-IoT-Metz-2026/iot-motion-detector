@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include <esp_task_wdt.h>
 #include <WiFi.h>
+#include <time.h>
 #include "secrets.h"
 #include "led_handler.h"
 #include "pir_handler.h"
@@ -70,13 +71,38 @@ void setup() {
   }
 
   Serial.println("\n[SETUP] ═══════════════════════════════");
-  Serial.println("[SETUP] Phase 2 : Initialisation DPS");
+  Serial.println("[SETUP] Phase 2 : Synchronisation NTP");
   Serial.println("[SETUP] ═══════════════════════════════");
-  
+
+  // Synchronisation de l'heure (nécessaire pour SAS Token)
+  Serial.println("[NTP] Synchronisation de l'heure...");
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1);
+  tzset();
+
+  unsigned long ntpStart = millis();
+  while (time(nullptr) < 1000000000 && (millis() - ntpStart < 15000)) {
+    delay(100);
+    esp_task_wdt_reset();
+  }
+
+  if (time(nullptr) < 1000000000) {
+    Serial.println("[NTP] ⚠️ Échec de synchronisation");
+    Serial.println("[SETUP] 🔄 Redémarrage dans 10 secondes...");
+    delay(10000);
+    ESP.restart();
+  }
+
+  Serial.println("[NTP] ✅ Heure synchronisée");
+
+  Serial.println("\n[SETUP] ═══════════════════════════════");
+  Serial.println("[SETUP] Phase 3 : Initialisation DPS");
+  Serial.println("[SETUP] ═══════════════════════════════");
+
   dpsInit();
 
   Serial.println("\n[SETUP] ═══════════════════════════════");
-  Serial.println("[SETUP] Phase 3 : Provisioning");
+  Serial.println("[SETUP] Phase 4 : Provisioning");
   Serial.println("[SETUP] ═══════════════════════════════");
 
   String hubHostname = "";
@@ -108,7 +134,7 @@ void setup() {
   }
 
   Serial.println("\n[SETUP] ═══════════════════════════════");
-  Serial.println("[SETUP] Phase 3 : Configuration Azure");
+  Serial.println("[SETUP] Phase 5 : Configuration Azure");
   Serial.println("[SETUP] ═══════════════════════════════");
 
   // Configuration Azure avec le Hub assigné

@@ -5,12 +5,13 @@
 # ============================================
 # Ce script fait TOUT en une seule commande :
 # 1. Déploie l'infrastructure (RG, IoT Hub, DPS)
-# 2. Crée l'enrollment group
+# 2. Crée l'enrollment group (clé symétrique)
 # 3. Génère les clés devices
 # 4. Sauvegarde tout dans un fichier
+# 5. Met à jour automatiquement secrets.h
 #
 # Usage:
-#   ./deploy-dps-complete.sh
+#   ./deploy-dps.sh
 
 set -e
 
@@ -61,7 +62,7 @@ echo ""
 # ÉTAPE 1 : Vérification Azure CLI
 # ============================================
 
-echo "📋 Étape 1/7 : Vérification Azure CLI..."
+echo "📋 Étape 1/8 : Vérification Azure CLI..."
 
 if ! command -v az &> /dev/null; then
     echo "❌ Azure CLI n'est pas installé"
@@ -69,8 +70,7 @@ if ! command -v az &> /dev/null; then
     exit 1
 fi
 
-echo "✅ Azure CLI détecté : $(az version --query \"azure-cli\" -o tsv)"
-
+echo "✅ Azure CLI détecté"
 if ! az account show &> /dev/null; then
     echo "❌ Non connecté à Azure"
     echo "👉 Exécuter : az login"
@@ -85,7 +85,7 @@ echo ""
 # ÉTAPE 2 : Resource Group
 # ============================================
 
-echo "📋 Étape 2/7 : Vérification Resource Group..."
+echo "📋 Étape 2/8 : Vérification Resource Group..."
 
 RG_EXISTS=$(az group exists --name "$RG_NAME" --output tsv)
 
@@ -105,7 +105,7 @@ echo ""
 # ÉTAPE 3 : IoT Hub
 # ============================================
 
-echo "📋 Étape 3/7 : Vérification IoT Hub..."
+echo "📋 Étape 3/8 : Vérification IoT Hub..."
 
 IOT_HUB_CHECK=$(az iot hub show \
   --name "$IOT_HUB_NAME" \
@@ -125,7 +125,7 @@ echo ""
 # ÉTAPE 4 : Annulation déploiements actifs
 # ============================================
 
-echo "📋 Étape 4/7 : Vérification déploiements actifs..."
+echo "📋 Étape 4/8 : Vérification déploiements actifs..."
 
 RUNNING_DEPLOYMENTS=$(az deployment group list \
   --resource-group "$RG_NAME" \
@@ -148,7 +148,7 @@ echo ""
 # ÉTAPE 5 : Déploiement Bicep
 # ============================================
 
-echo "📋 Étape 5/7 : Déploiement infrastructure..."
+echo "📋 Étape 5/8 : Déploiement infrastructure..."
 echo "⏳ 3-5 minutes..."
 echo ""
 
@@ -173,10 +173,39 @@ fi
 echo ""
 
 # ============================================
+# ÉTAPE 5B : Création de l'enrollment group
+# ============================================
+
+echo "📋 Étape 5B/8 : Vérification / création de l'enrollment group avec clé symétrique..."
+
+EXISTING_GROUP=$(az iot dps enrollment-group show \
+  --dps-name "$DPS_NAME" \
+  --resource-group "$RG_NAME" \
+  --enrollment-id "$ENROLLMENT_GROUP_NAME" \
+  --query "enrollmentGroupId" -o tsv 2>/dev/null || echo "")
+
+if [ -n "$EXISTING_GROUP" ]; then
+  echo "✅ Enrollment group déjà existant : $ENROLLMENT_GROUP_NAME"
+else
+  echo "🔧 Création de l'enrollment group (attestation = symmetricKey)..."
+  az iot dps enrollment-group create \
+    --dps-name "$DPS_NAME" \
+    --resource-group "$RG_NAME" \
+    --enrollment-id "$ENROLLMENT_GROUP_NAME" \
+    --provisioning-status enabled \
+    --iot-hubs "$IOT_HUB_NAME.azure-devices.net" \
+    --allocation-policy static \
+    --attestation-type symmetricKey \
+    --output none
+  echo "✅ Enrollment group créé avec attestation par clé symétrique"
+fi
+echo ""
+
+# ============================================
 # ÉTAPE 6 : Extraction Outputs
 # ============================================
 
-echo "📋 Étape 6/7 : Récupération des informations..."
+echo "📋 Étape 6/8 : Récupération des informations..."
 
 DPS_ID_SCOPE=$(az deployment sub show \
   --name "$DEPLOYMENT_NAME" \
@@ -190,54 +219,28 @@ IOT_HUB_HOSTNAME=$(az deployment sub show \
   --name "$DEPLOYMENT_NAME" \
   --query "properties.outputs.iotHubHostName.value" -o tsv)
 
-echo "✅ Outputs récupérés"
-echo ""
-
-# ============================================
-# ÉTAPE 7 : Enrollment Group
-# ============================================
-
-echo "📋 Étape 7/7 : Configuration Enrollment Group..."
-
-EXISTING_ENROLLMENT=$(az iot dps enrollment-group show \
-  --dps-name "$DPS_NAME" \
-  --resource-group "$RG_NAME" \
-  --enrollment-id "$ENROLLMENT_GROUP_NAME" \
-  --query enrollmentGroupId -o tsv 2>/dev/null || echo "NOT_FOUND")
-
-if [ "$EXISTING_ENROLLMENT" != "NOT_FOUND" ]; then
-    echo "✅ Enrollment group existe"
-else
-    echo "🔧 Création enrollment group..."
-    az iot dps enrollment-group create \
-      --dps-name "$DPS_NAME" \
-      --resource-group "$RG_NAME" \
-      --enrollment-id "$ENROLLMENT_GROUP_NAME" \
-      --provisioning-status enabled \
-      --iot-hubs "$IOT_HUB_HOSTNAME" \
-      --allocation-policy static \
-      --output none
-    echo "✅ Enrollment group créé"
-fi
-
 PRIMARY_KEY=$(az iot dps enrollment-group show \
   --dps-name "$DPS_NAME" \
   --resource-group "$RG_NAME" \
   --enrollment-id "$ENROLLMENT_GROUP_NAME" \
+  --show-keys \
   --query 'attestation.symmetricKey.primaryKey' -o tsv)
 
+echo "✅ Outputs récupérés"
 echo ""
 
 # ============================================
-# GÉNÉRATION DES CLÉS DEVICES
+# ÉTAPE 7 : Génération des clés devices
 # ============================================
 
 echo "🔐 Génération des clés devices..."
 echo ""
 
-# Device 1 : ESP32
 ESP32_REG_ID="esp32-pir-01"
 ESP32_DEVICE_KEY=$(derive_device_key "$PRIMARY_KEY" "$ESP32_REG_ID")
+
+PHOTON2_REG_ID="photon2-pir-01"
+PHOTON2_DEVICE_KEY=$(derive_device_key "$PRIMARY_KEY" "$PHOTON2_REG_ID")
 
 echo "─────────────────────────────────────────"
 echo "📱 ESP32 PIR Sensor"
@@ -245,12 +248,6 @@ echo "────────────────────────�
 echo "Registration ID : $ESP32_REG_ID"
 echo "Device Key      : $ESP32_DEVICE_KEY"
 echo ""
-
-# Device 2 : Photon2
-PHOTON2_REG_ID="photon2-pir-01"
-PHOTON2_DEVICE_KEY=$(derive_device_key "$PRIMARY_KEY" "$PHOTON2_REG_ID")
-
-echo "─────────────────────────────────────────"
 echo "📱 Photon2 PIR Sensor"
 echo "─────────────────────────────────────────"
 echo "Registration ID : $PHOTON2_REG_ID"
@@ -303,20 +300,42 @@ DPS_NAME=$DPS_NAME
 # DEVICE CREDENTIALS
 # ============================================
 
-# ESP32 PIR Sensor
 ESP32_PIR_01_REGISTRATION_ID=$ESP32_REG_ID
 ESP32_PIR_01_DEVICE_KEY=$ESP32_DEVICE_KEY
 
-# Photon2 PIR Sensor
 PHOTON2_PIR_01_REGISTRATION_ID=$PHOTON2_REG_ID
 PHOTON2_PIR_01_DEVICE_KEY=$PHOTON2_DEVICE_KEY
-
 EOF
 
 echo "💾 Credentials sauvegardés : dps-credentials.env"
 echo ""
+
+# ============================================
+# MISE À JOUR AUTOMATIQUE DE secrets.h
+# ============================================
+
+SECRETS_H_PATH="../firmware/esp32-pir-sensor/ESP32/include/secrets.h"
+
+if [ -f "$SECRETS_H_PATH" ]; then
+    echo "🔧 Mise à jour automatique de secrets.h..."
+    cp "$SECRETS_H_PATH" "${SECRETS_H_PATH}.backup"
+
+    # Utilisation du délimiteur | pour éviter les erreurs sur les clés contenant /
+    sed -i "s|#define DPS_ID_SCOPE \".*\"|#define DPS_ID_SCOPE \"$DPS_ID_SCOPE\"|" "$SECRETS_H_PATH"
+    sed -i "s|#define REGISTRATION_ID \".*\"|#define REGISTRATION_ID \"$ESP32_REG_ID\"|" "$SECRETS_H_PATH"
+    sed -i "s|#define DEVICE_KEY \".*\"|#define DEVICE_KEY \"$ESP32_DEVICE_KEY\"|" "$SECRETS_H_PATH"
+
+    echo "✅ secrets.h mis à jour automatiquement"
+    echo "   Backup sauvegardé : ${SECRETS_H_PATH}.backup"
+else
+    echo "⚠️  secrets.h non trouvé à : $SECRETS_H_PATH"
+    echo "   Veuillez copier manuellement les credentials"
+fi
+
+echo ""
 echo "🎉 Infrastructure prête pour le firmware !"
 echo ""
-echo "📋 Prochaine étape : Configuration du firmware ESP32"
-echo "   → Utiliser les credentials ci-dessus"
+echo "📋 Prochaine étape : Compilation et téléversement du firmware"
+echo "   cd ../firmware/esp32-pir-sensor/ESP32"
+echo "   pio run --target upload"
 echo ""
