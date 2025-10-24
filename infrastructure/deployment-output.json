@@ -1,0 +1,147 @@
+{
+  "id": "/subscriptions/a48a1a93-f99c-475c-8737-17bd01337e0d/providers/Microsoft.Resources/deployments/deploy-iot-dps-20251023-133312",
+  "location": "germanywestcentral",
+  "name": "deploy-iot-dps-20251023-133312",
+  "properties": {
+    "correlationId": "bfd94d84-7267-4fd2-85e7-4d0cc5cde913",
+    "debugSetting": null,
+    "dependencies": [
+      {
+        "dependsOn": [
+          {
+            "id": "/subscriptions/a48a1a93-f99c-475c-8737-17bd01337e0d/resourceGroups/rg-iotdetector-dev",
+            "resourceName": "rg-iotdetector-dev",
+            "resourceType": "Microsoft.Resources/resourceGroups"
+          }
+        ],
+        "id": "/subscriptions/a48a1a93-f99c-475c-8737-17bd01337e0d/resourceGroups/rg-iotdetector-dev/providers/Microsoft.Resources/deployments/deploy-dps",
+        "resourceGroup": "rg-iotdetector-dev",
+        "resourceName": "deploy-dps",
+        "resourceType": "Microsoft.Resources/deployments"
+      }
+    ],
+    "diagnostics": null,
+    "duration": "PT25.6631638S",
+    "error": null,
+    "extensions": null,
+    "mode": "Incremental",
+    "onErrorDeployment": null,
+    "outputResources": [
+      {
+        "apiVersion": null,
+        "extension": null,
+        "id": "/subscriptions/a48a1a93-f99c-475c-8737-17bd01337e0d/resourceGroups/rg-iotdetector-dev",
+        "identifiers": null,
+        "resourceType": null
+      },
+      {
+        "apiVersion": null,
+        "extension": null,
+        "id": "/subscriptions/a48a1a93-f99c-475c-8737-17bd01337e0d/resourceGroups/rg-iotdetector-dev/providers/Microsoft.Devices/provisioningServices/dps-iotdetector-dev",
+        "identifiers": null,
+        "resourceGroup": "rg-iotdetector-dev",
+        "resourceType": null
+      }
+    ],
+    "outputs": {
+      "dpsEndpoint": {
+        "type": "String",
+        "value": "global.azure-devices-provisioning.net"
+      },
+      "dpsIdScope": {
+        "type": "String",
+        "value": "0ne0106D364"
+      },
+      "dpsName": {
+        "type": "String",
+        "value": "dps-iotdetector-dev"
+      },
+      "iotHubHostName": {
+        "type": "String",
+        "value": "iot-iotdetector-dev.azure-devices.net"
+      },
+      "iotHubName": {
+        "type": "String",
+        "value": "iot-iotdetector-dev"
+      },
+      "resourceGroupName": {
+        "type": "String",
+        "value": "rg-iotdetector-dev"
+      }
+    },
+    "parameters": {
+      "createNewIotHub": {
+        "type": "Bool",
+        "value": false
+      },
+      "environment": {
+        "type": "String",
+        "value": "dev"
+      },
+      "location": {
+        "type": "String",
+        "value": "germanywestcentral"
+      },
+      "projectName": {
+        "type": "String",
+        "value": "iotdetector"
+      },
+      "tags": {
+        "type": "Object",
+        "value": {
+          "environment": "dev",
+          "managedBy": "Bicep",
+          "project": "IoT-Motion-Detector"
+        }
+      }
+    },
+    "parametersLink": null,
+    "providers": [
+      {
+        "id": null,
+        "namespace": "Microsoft.Resources",
+        "providerAuthorizationConsentState": null,
+        "registrationPolicy": null,
+        "registrationState": null,
+        "resourceTypes": [
+          {
+            "aliases": null,
+            "apiProfiles": null,
+            "apiVersions": null,
+            "capabilities": null,
+            "defaultApiVersion": null,
+            "locationMappings": null,
+            "locations": [
+              "germanywestcentral"
+            ],
+            "properties": null,
+            "resourceType": "resourceGroups",
+            "zoneMappings": null
+          },
+          {
+            "aliases": null,
+            "apiProfiles": null,
+            "apiVersions": null,
+            "capabilities": null,
+            "defaultApiVersion": null,
+            "locationMappings": null,
+            "locations": [
+              null
+            ],
+            "properties": null,
+            "resourceType": "deployments",
+            "zoneMappings": null
+          }
+        ]
+      }
+    ],
+    "provisioningState": "Succeeded",
+    "templateHash": "14574104719244720632",
+    "templateLink": null,
+    "timestamp": "2025-10-23T11:33:45.761602+00:00",
+    "validatedResources": null,
+    "validationLevel": null
+  },
+  "tags": null,
+  "type": "Microsoft.Resources/deployments"
+}
