@@ -1,31 +1,49 @@
 // include/azure_handler.h
-#pragma once
+#ifndef AZURE_HANDLER_H
+#define AZURE_HANDLER_H
+
 #include <Arduino.h>
 
+// ============================================
+// Azure IoT Hub Handler (avec support DPS)
+// ============================================
+
 /**
- * DÃ©finit la version du firmware pour le reporting
+ * Définit le hostname du IoT Hub (utilisé après provisioning DPS)
+ * DOIT être appelé AVANT azureInit()
+ * @param hostname Hostname du Hub (ex: "iot-xxx.azure-devices.net")
+ */
+void azureSetIotHub(const char* hostname);
+
+/**
+ * Définit la version du firmware (pour le Device Twin)
+ * @param version Version du firmware
  */
 void azureSetFirmwareVersion(const char* version);
 
 /**
- * Initialise la connexion Azure IoT Hub (WiFi, MQTT, NTP)
+ * Initialise le module Azure (WiFi, MQTT, Device Twin)
+ * Appeler APRÈS azureSetIotHub()
  */
 void azureInit();
 
 /**
- * Boucle principale Azure (state machines WiFi/MQTT, buffer, twin, status)
- * Ã€ appeler dans loop()
+ * Boucle principale Azure (gère WiFi, MQTT, buffer, status)
+ * À appeler dans loop()
  */
 void azureLoop();
 
 /**
- * Publie une dÃ©tection de mouvement vers Azure IoT Hub
- * @param count NumÃ©ro de la dÃ©tection
- * @param timestamp Timestamp Unix
+ * Publie un message de télémétrie
+ * @param jsonPayload Payload JSON à envoyer
+ * @return true si publié, false sinon
  */
-void azurePublishMotion(int count, time_t timestamp);
+bool azurePublishTelemetry(const char* jsonPayload);
 
 /**
- * Publie le statut systÃ¨me vers Azure IoT Hub
+ * Enregistre un callback pour les détections PIR
+ * @param callback Fonction appelée lors d'une détection
  */
-void publishStatus();
+void azureSetPirCallback(void (*callback)());
+
+#endif
