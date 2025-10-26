@@ -95,5 +95,9 @@ infrastructure/deployment-output.json
 infrastructure/*.log
 infrastructure/.azure/
 
+# Bicep compiled ARM templates (auto-generated)
+infrastructure/main.json
+infrastructure/modules/*.json
+
 # Backup files
 *.backup
