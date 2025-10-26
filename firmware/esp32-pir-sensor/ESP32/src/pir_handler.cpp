@@ -3,6 +3,21 @@
 #include "config_store.h"
 #include "azure_handler.h"
 #include <Arduino.h>
+#include <WiFi.h>
+#include <esp_system.h>
+
+// ============================================
+// HELPER : Gestion du débordement de millis()
+// ============================================
+
+/**
+ * Vérifie si un intervalle de temps s'est écoulé depuis un timestamp.
+ * Cette fonction gère correctement le débordement de millis() (après ~49 jours)
+ * grâce à l'arithmétique modulaire des unsigned long.
+ */
+inline bool hasElapsed(unsigned long lastTime, unsigned long interval) {
+  return (millis() - lastTime) >= interval;
+}
 
 // ============================================
 // VARIABLES GLOBALES
@@ -47,15 +62,15 @@ void pirLoop() {
   int currentState = digitalRead(s_pirPin);
   unsigned long now = millis();
   
-  // Détection d'un changement d'état
+  // Détection d'un changement d'état (gère le débordement de millis)
   if (currentState != lastPirState) {
-    if ((now - lastStateChange) > DEBOUNCE_DELAY) {
-      
+    if (hasElapsed(lastStateChange, DEBOUNCE_DELAY)) {
+
       // Mouvement détecté (LOW → HIGH)
       if (currentState == HIGH && !motionInProgress) {
-        
-        // Vérifier le cooldown
-        if ((now - lastValidDetection) > configGetCooldown()) {
+
+        // Vérifier le cooldown (gère le débordement de millis)
+        if (hasElapsed(lastValidDetection, configGetCooldown())) {
           
           detectionCount++;
           lastValidDetection = now;
@@ -67,13 +82,20 @@ void pirLoop() {
           Serial.println("║      🚨 MOUVEMENT DÉTECTÉ ! 🚨       ║");
           Serial.println("╚═══════════════════════════════════════╝");
           Serial.printf("[PIR] Détection #%d\n", detectionCount);
-          
-          // Publier vers Azure
-          char payload[256];
+
+          // Collecter les métriques enrichies
+          float temperature = temperatureRead(); // Température interne ESP32
+          int wifiChannel = WiFi.channel();
+          int rssi = WiFi.RSSI();
+          uint32_t freeHeap = ESP.getFreeHeap();
+
+          // Publier vers Azure avec métriques enrichies
+          char payload[512];
           snprintf(payload, sizeof(payload),
-                   "{\"event\":\"motion_detected\",\"count\":%d,\"timestamp\":%lu}",
-                   detectionCount, now);
-          
+                   "{\"event\":\"motion_detected\",\"count\":%d,\"timestamp\":%lu,"
+                   "\"temperature\":%.2f,\"wifiChannel\":%d,\"rssi\":%d,\"freeHeap\":%u}",
+                   detectionCount, now, temperature, wifiChannel, rssi, freeHeap);
+
           azurePublishTelemetry(payload);
         } else {
           Serial.println("[PIR] ⏳ Cooldown actif, détection ignorée");

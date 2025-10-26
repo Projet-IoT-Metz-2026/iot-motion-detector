@@ -1,12 +1,12 @@
 # 🏠 ESP32 Motion Detector - Azure IoT Hub
 
-![Firmware](https://img.shields.io/badge/Firmware-v2.0.0-green)
+![Firmware](https://img.shields.io/badge/Firmware-v3.0.0-green)
 ![Platform](https://img.shields.io/badge/Platform-ESP32-blue)
 ![Framework](https://img.shields.io/badge/Framework-Arduino-teal)
-![Cloud](https://img.shields.io/badge/Cloud-Azure%20IoT-blue)
+![Cloud](https://img.shields.io/badge/Cloud-Azure%20IoT%20DPS-blue)
 ![Status](https://img.shields.io/badge/Status-Production%20Ready-success)
 
-Système IoT professionnel de détection de mouvement connecté à Azure IoT Hub avec Device Twin, persistance EEPROM et architecture robuste niveau production.
+Système IoT professionnel de détection de mouvement connecté à Azure IoT Hub avec Device Provisioning Service (DPS), OTA updates, message queue offline, et commandes cloud.
 
 ---
 
@@ -45,17 +45,23 @@ Ce projet implémente un système de détection de mouvement intelligent basé s
 
 ## ✨ Caractéristiques
 
-### Firmware (v2.0.0)
+### Firmware (v3.0.0) - VERSION MAJEURE
 
 #### 🔧 Fonctionnalités principales
 
-- **Détection PIR** avec debounce et cooldown configurable
-- **Communication bidirectionnelle** avec Azure IoT Hub (MQTT/TLS)
-- **Device Twin** pour synchronisation de configuration
-- **Persistance EEPROM** (configuration survit aux reboots)
-- **Buffer de messages** anti-perte (50 messages max)
-- **Reconnexion automatique** WiFi et MQTT
-- **Watchdog timer** (protection contre les plantages)
+- **Détection PIR** avec debounce et cooldown configurable (1s-5min)
+- **Communication bidirectionnelle** avec Azure IoT Hub (MQTT/TLS 1.2)
+- **Device Provisioning Service (DPS)** - Provisionnement automatique
+- **Device Twin** avec validation des propriétés (min/max bounds)
+- **Persistence LittleFS** (configuration survit aux reboots)
+- **Message Queue Offline** (50 messages max, persistence sur flash)
+- **MQTT Retry Logic** avec exponential backoff (1s → 30s)
+- **OTA Firmware Updates** depuis Azure Blob Storage
+- **Commandes Cloud** (reboot, clearCache, calibratePIR, setDetectionEnabled)
+- **Télémétrie Enrichie** (température, WiFi channel, RSSI, heap)
+- **Protection Buffer Overflow** et validation base64
+- **Fix millis() Overflow** (fonctionne 49 jours+)
+- **Watchdog timer** avec gestion des opérations longues
 - **Mode DEBUG** activable/désactivable
 
 #### 📊 Métriques système

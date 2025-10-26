@@ -82,9 +82,15 @@ String generateDpsSasToken() {
   // Decode device key (base64)
   uint8_t decodedKey[64];
   size_t decodedLen;
-  mbedtls_base64_decode(decodedKey, sizeof(decodedKey), &decodedLen,
-                        (const unsigned char*)deviceKey, strlen(deviceKey));
-  
+  int ret = mbedtls_base64_decode(decodedKey, sizeof(decodedKey), &decodedLen,
+                                   (const unsigned char*)deviceKey, strlen(deviceKey));
+
+  // Vérifier que le décodage a réussi et que la taille est valide
+  if (ret != 0 || decodedLen > sizeof(decodedKey)) {
+    Serial.println("[DPS] ❌ Erreur: DEVICE_KEY invalide ou trop longue");
+    return String("");
+  }
+
   // HMAC-SHA256
   uint8_t hash[32];
   mbedtls_md_context_t ctx;
@@ -350,7 +356,9 @@ DpsAssignment dpsProvision() {
   
   if (assignmentReceived) {
     strncpy(result.iotHubHostname, assignedHub.c_str(), sizeof(result.iotHubHostname) - 1);
+    result.iotHubHostname[sizeof(result.iotHubHostname) - 1] = '\0';  // Force null termination
     strncpy(result.deviceId, assignedDeviceId.c_str(), sizeof(result.deviceId) - 1);
+    result.deviceId[sizeof(result.deviceId) - 1] = '\0';  // Force null termination
     result.success = true;
     
     // Sauvegarder en cache

@@ -2,13 +2,34 @@
 #include "azure_handler.h"
 #include "secrets.h"
 #include "config_store.h"
+#include "ota_handler.h"
+#include "message_queue.h"
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <time.h>
 #include <ArduinoJson.h>
+#include <LittleFS.h>
+#include <esp_task_wdt.h>
 #include "mbedtls/md.h"
 #include "mbedtls/base64.h"
+
+// ============================================
+// HELPER : Gestion du débordement de millis()
+// ============================================
+
+/**
+ * Vérifie si un intervalle de temps s'est écoulé depuis un timestamp.
+ * Cette fonction gère correctement le débordement de millis() (après ~49 jours)
+ * grâce à l'arithmétique modulaire des unsigned long.
+ *
+ * @param lastTime Timestamp de référence (en ms)
+ * @param interval Intervalle à vérifier (en ms)
+ * @return true si l'intervalle s'est écoulé
+ */
+inline bool hasElapsed(unsigned long lastTime, unsigned long interval) {
+  return (millis() - lastTime) >= interval;
+}
 
 // ============================================
 // CERTIFICAT AZURE (DigiCert Global Root G2)
@@ -44,8 +65,13 @@ static const char* AZURE_ROOT_CA = \
 
 static const int MQTT_PORT = 8883;
 static const unsigned long WIFI_CONNECT_TIMEOUT = 30000;
-static const unsigned long MQTT_RECONNECT_DELAY = 5000;
+static const unsigned long MQTT_RECONNECT_BASE_DELAY = 1000;  // Délai initial : 1 seconde
+static const unsigned long MQTT_RECONNECT_MAX_DELAY = 30000;  // Délai max : 30 secondes
 static const unsigned long STATUS_PUBLISH_INTERVAL = 60000;
+
+// Limites pour les propriétés Device Twin
+static const int COOLDOWN_MIN_MS = 1000;    // 1 seconde minimum
+static const int COOLDOWN_MAX_MS = 300000;  // 5 minutes maximum
 
 // ============================================
 // VARIABLES GLOBALES (définies dynamiquement par DPS)
@@ -71,6 +97,8 @@ static char topicTwinRes[128];
 
 static unsigned long lastStatusPublish = 0;
 static unsigned long lastMqttAttempt = 0;
+static int mqttRetryCount = 0;  // Nombre de tentatives échouées
+static unsigned long mqttCurrentBackoff = MQTT_RECONNECT_BASE_DELAY;  // Délai actuel
 
 static void (*pirDetectionCallback)() = nullptr;
 
@@ -108,7 +136,7 @@ bool syncTime() {
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
   
   unsigned long start = millis();
-  while (time(nullptr) < 1000000000 && (millis() - start < 15000)) {
+  while (time(nullptr) < 1000000000 && !hasElapsed(start, 15000)) {
     delay(100);
   }
   
@@ -137,9 +165,15 @@ String generateSasToken() {
   // Decode device key
   uint8_t decodedKey[64];
   size_t decodedLen;
-  mbedtls_base64_decode(decodedKey, sizeof(decodedKey), &decodedLen,
-                        (const unsigned char*)DEVICE_KEY, strlen(DEVICE_KEY));
-  
+  int ret = mbedtls_base64_decode(decodedKey, sizeof(decodedKey), &decodedLen,
+                                   (const unsigned char*)DEVICE_KEY, strlen(DEVICE_KEY));
+
+  // Vérifier que le décodage a réussi et que la taille est valide
+  if (ret != 0 || decodedLen > sizeof(decodedKey)) {
+    Serial.println("[Azure] ❌ Erreur: DEVICE_KEY invalide ou trop longue");
+    return String("");
+  }
+
   // HMAC-SHA256
   uint8_t hash[32];
   mbedtls_md_context_t ctx;
@@ -196,8 +230,141 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
       
       if (doc.containsKey("cooldownMs")) {
         int cooldown = doc["cooldownMs"];
-        configSetCooldown(cooldown);
-        Serial.printf("[Twin] cooldownMs → %d\n", cooldown);
+
+        // Validation des limites
+        if (cooldown < COOLDOWN_MIN_MS || cooldown > COOLDOWN_MAX_MS) {
+          Serial.printf("[Twin] ❌ cooldownMs rejeté: %d (limites: %d-%d)\n",
+                        cooldown, COOLDOWN_MIN_MS, COOLDOWN_MAX_MS);
+
+          // Publier le rejet dans les propriétés reportées
+          char reportedProps[256];
+          snprintf(reportedProps, sizeof(reportedProps),
+                   "{\"cooldownMs\":{\"value\":%d,\"ac\":400,\"av\":%d,\"ad\":\"Valeur hors limites [%d-%d]\"}}",
+                   configGetCooldown(), doc.containsKey("$version") ? (int)doc["$version"] : 0,
+                   COOLDOWN_MIN_MS, COOLDOWN_MAX_MS);
+          mqttClient.publish(topicTwinPatch, reportedProps);
+        } else {
+          // Valeur valide : appliquer
+          configSetCooldown(cooldown);
+          Serial.printf("[Twin] ✅ cooldownMs → %d\n", cooldown);
+
+          // Confirmer dans les propriétés reportées
+          char reportedProps[256];
+          snprintf(reportedProps, sizeof(reportedProps),
+                   "{\"cooldownMs\":{\"value\":%d,\"ac\":200,\"av\":%d,\"ad\":\"Succès\"}}",
+                   cooldown, doc.containsKey("$version") ? (int)doc["$version"] : 0);
+          mqttClient.publish(topicTwinPatch, reportedProps);
+        }
+      }
+
+      // Commande OTA : mise à jour du firmware
+      if (doc.containsKey("firmwareUrl")) {
+        const char* firmwareUrl = doc["firmwareUrl"];
+        Serial.printf("[Twin] Commande OTA reçue : %s\n", firmwareUrl);
+
+        // Publier l'état "en cours" dans les propriétés reportées
+        char reportedProps[512];
+        snprintf(reportedProps, sizeof(reportedProps),
+                 "{\"firmwareUrl\":{\"value\":\"%s\",\"ac\":202,\"av\":%d,\"ad\":\"Mise à jour en cours...\"}}",
+                 firmwareUrl, doc.containsKey("$version") ? (int)doc["$version"] : 0);
+        mqttClient.publish(topicTwinPatch, reportedProps);
+
+        // Démarrer la mise à jour OTA (bloquant, redémarre l'ESP32 en cas de succès)
+        bool otaSuccess = otaStartUpdate(firmwareUrl);
+
+        if (!otaSuccess) {
+          // Publier l'échec dans les propriétés reportées
+          snprintf(reportedProps, sizeof(reportedProps),
+                   "{\"firmwareUrl\":{\"value\":\"%s\",\"ac\":500,\"av\":%d,\"ad\":\"Échec: %s\"}}",
+                   firmwareUrl, doc.containsKey("$version") ? (int)doc["$version"] : 0,
+                   otaGetLastError().c_str());
+          mqttClient.publish(topicTwinPatch, reportedProps);
+        }
+        // Si succès, l'ESP32 redémarre automatiquement
+      }
+
+      // Commandes cloud
+      if (doc.containsKey("command")) {
+        const char* command = doc["command"];
+        Serial.printf("[Twin] Commande cloud reçue : %s\n", command);
+
+        char reportedProps[512];
+        bool commandSuccess = false;
+        String commandResult = "";
+
+        if (strcmp(command, "reboot") == 0) {
+          // Commande : redémarrer l'ESP32
+          Serial.println("[Command] Redémarrage dans 3 secondes...");
+          commandSuccess = true;
+          commandResult = "Redémarrage en cours";
+
+          // Publier confirmation
+          snprintf(reportedProps, sizeof(reportedProps),
+                   "{\"command\":{\"value\":\"%s\",\"ac\":200,\"av\":%d,\"ad\":\"Succès: %s\"}}",
+                   command, doc.containsKey("$version") ? (int)doc["$version"] : 0, commandResult.c_str());
+          mqttClient.publish(topicTwinPatch, reportedProps);
+
+          delay(3000);
+          ESP.restart();
+
+        } else if (strcmp(command, "clearCache") == 0) {
+          // Commande : vider le cache DPS et la file de messages
+          Serial.println("[Command] Vidage du cache...");
+
+          // Vider la file de messages
+          messageQueueClear();
+
+          // Supprimer le fichier de cache DPS
+          if (LittleFS.begin(true)) {
+            if (LittleFS.exists("/littlefs/dps_hub_cache.txt")) {
+              LittleFS.remove("/littlefs/dps_hub_cache.txt");
+            }
+          }
+
+          commandSuccess = true;
+          commandResult = "Cache vidé (file de messages + cache DPS)";
+
+        } else if (strcmp(command, "setDetectionEnabled") == 0) {
+          // Commande : activer/désactiver la détection
+          bool enabled = doc.containsKey("enabled") ? (bool)doc["enabled"] : true;
+          configSetDetectionEnabled(enabled);
+
+          commandSuccess = true;
+          commandResult = enabled ? "Détection activée" : "Détection désactivée";
+          Serial.printf("[Command] %s\n", commandResult.c_str());
+
+        } else if (strcmp(command, "calibratePIR") == 0) {
+          // Commande : calibrer le capteur PIR
+          Serial.println("[Command] Calibration du capteur PIR...");
+          Serial.println("[Command] Ne pas bouger pendant 30 secondes...");
+
+          // Simulation de calibration (attente de 30 secondes avec reset du watchdog)
+          unsigned long calibStart = millis();
+          while (!hasElapsed(calibStart, 30000)) {
+            delay(100);
+            esp_task_wdt_reset(); // Reset watchdog pour éviter le reboot
+          }
+
+          commandSuccess = true;
+          commandResult = "Calibration terminée";
+          Serial.println("[Command] ✅ Calibration terminée");
+
+        } else {
+          // Commande inconnue
+          commandSuccess = false;
+          commandResult = "Commande inconnue: " + String(command);
+          Serial.printf("[Command] ❌ %s\n", commandResult.c_str());
+        }
+
+        // Publier le résultat dans les propriétés reportées
+        if (strcmp(command, "reboot") != 0) { // Ne pas publier pour reboot (déjà fait)
+          snprintf(reportedProps, sizeof(reportedProps),
+                   "{\"command\":{\"value\":\"%s\",\"ac\":%d,\"av\":%d,\"ad\":\"%s\"}}",
+                   command, commandSuccess ? 200 : 400,
+                   doc.containsKey("$version") ? (int)doc["$version"] : 0,
+                   commandResult.c_str());
+          mqttClient.publish(topicTwinPatch, reportedProps);
+        }
       }
     }
   }
@@ -236,16 +403,21 @@ bool connectWiFi() {
 bool connectMqtt() {
   if (mqttClient.connected()) {
     mqttState = AZURE_MQTT_CONNECTED;
+    // Reset du backoff en cas de connexion réussie
+    mqttRetryCount = 0;
+    mqttCurrentBackoff = MQTT_RECONNECT_BASE_DELAY;
     return true;
   }
-  
-  if (millis() - lastMqttAttempt < MQTT_RECONNECT_DELAY) {
+
+  // Utiliser le délai de backoff exponentiel (gère le débordement de millis)
+  if (!hasElapsed(lastMqttAttempt, mqttCurrentBackoff)) {
     return false;
   }
-  
+
   lastMqttAttempt = millis();
-  
-  Serial.printf("[MQTT] Connexion à %s:%d...\n", iotHubHostname.c_str(), MQTT_PORT);
+
+  Serial.printf("[MQTT] Connexion à %s:%d... (tentative #%d, backoff: %lums)\n",
+                iotHubHostname.c_str(), MQTT_PORT, mqttRetryCount + 1, mqttCurrentBackoff);
   
   // Générer SAS Token
   String sasToken = generateSasToken();
@@ -288,6 +460,11 @@ bool connectMqtt() {
   } else {
     Serial.printf("[MQTT] ❌ Échec connexion (code: %d)\n", mqttClient.state());
     mqttState = AZURE_MQTT_DISCONNECTED;
+
+    // Incrémenter le compteur et doubler le backoff
+    mqttRetryCount++;
+    mqttCurrentBackoff = min(mqttCurrentBackoff * 2, MQTT_RECONNECT_MAX_DELAY);
+
     return false;
   }
 }
@@ -310,13 +487,19 @@ void azureSetFirmwareVersion(const char* version) {
 
 void azureInit() {
   Serial.println("[Azure] Initialisation...");
-  
+
   // Vérifier que le Hub est défini
   if (iotHubHostname.length() == 0) {
     Serial.println("[Azure] ❌ ERREUR: Hub non défini ! Appelez azureSetIotHub() d'abord.");
     return;
   }
-  
+
+  // Initialiser le module OTA
+  otaSetup();
+
+  // Initialiser la file de messages
+  messageQueueInit();
+
   // Configuration TLS
   wifiClient.setCACert(AZURE_ROOT_CA);
   
@@ -328,9 +511,9 @@ void azureInit() {
   // Connexion WiFi
   connectWiFi();
   
-  // Attente connexion WiFi
+  // Attente connexion WiFi (gère le débordement de millis)
   unsigned long wifiStart = millis();
-  while (wifiState != AZURE_WIFI_CONNECTED && (millis() - wifiStart < WIFI_CONNECT_TIMEOUT)) {
+  while (wifiState != AZURE_WIFI_CONNECTED && !hasElapsed(wifiStart, WIFI_CONNECT_TIMEOUT)) {
     connectWiFi();
     delay(100);
   }
@@ -359,13 +542,13 @@ void azureLoop() {
     } else {
       mqttClient.loop();
       
-      // Publication status périodique
-      if (millis() - lastStatusPublish > STATUS_PUBLISH_INTERVAL) {
+      // Publication status périodique (gère le débordement de millis)
+      if (hasElapsed(lastStatusPublish, STATUS_PUBLISH_INTERVAL)) {
         char statusMsg[256];
         snprintf(statusMsg, sizeof(statusMsg),
                  "{\"deviceId\":\"%s\",\"status\":\"online\",\"uptime\":%lu,\"rssi\":%d,\"freeHeap\":%d}",
                  deviceId.c_str(), millis() / 1000, WiFi.RSSI(), ESP.getFreeHeap());
-        
+
         mqttClient.publish(topicTelemetry, statusMsg);
         lastStatusPublish = millis();
       }
@@ -374,17 +557,37 @@ void azureLoop() {
 }
 
 bool azurePublishTelemetry(const char* jsonPayload) {
-  if (mqttState != AZURE_MQTT_CONNECTED) {
-    Serial.println("[Azure] ⚠️ MQTT non connecté, impossible de publier");
-    return false;
-  }
-  
-  if (mqttClient.publish(topicTelemetry, jsonPayload)) {
-    Serial.println("[Azure] ✅ Télémétrie publiée");
-    return true;
+  // Si MQTT est connecté, envoyer les messages en file d'attente d'abord
+  if (mqttState == AZURE_MQTT_CONNECTED) {
+    // Envoyer tous les messages en attente
+    while (!messageQueueIsEmpty()) {
+      char queuedMessage[MESSAGE_MAX_LENGTH];
+      if (messageQueuePeek(queuedMessage, sizeof(queuedMessage))) {
+        if (mqttClient.publish(topicTelemetry, queuedMessage)) {
+          Serial.println("[Azure] ✅ Message en file d'attente publié");
+          messageQueuePop();
+        } else {
+          Serial.println("[Azure] ❌ Échec publication message en file");
+          break; // Arrêter si échec
+        }
+      } else {
+        break;
+      }
+    }
+
+    // Envoyer le nouveau message
+    if (mqttClient.publish(topicTelemetry, jsonPayload)) {
+      Serial.println("[Azure] ✅ Télémétrie publiée");
+      return true;
+    } else {
+      Serial.println("[Azure] ❌ Échec publication, ajout à la file");
+      messageQueuePush(jsonPayload);
+      return false;
+    }
   } else {
-    Serial.println("[Azure] ❌ Échec publication");
-    return false;
+    // MQTT non connecté : ajouter à la file d'attente
+    Serial.println("[Azure] ⚠️ MQTT non connecté, ajout à la file d'attente");
+    return messageQueuePush(jsonPayload);
   }
 }
 

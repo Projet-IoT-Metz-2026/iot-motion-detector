@@ -10,11 +10,24 @@
 #include "config_store.h"
 #include "dps_handler.h"
 
+// ============================================
+// HELPER : Gestion du débordement de millis()
+// ============================================
+
+/**
+ * Vérifie si un intervalle de temps s'est écoulé depuis un timestamp.
+ * Cette fonction gère correctement le débordement de millis() (après ~49 jours)
+ * grâce à l'arithmétique modulaire des unsigned long.
+ */
+inline bool hasElapsed(unsigned long lastTime, unsigned long interval) {
+  return (millis() - lastTime) >= interval;
+}
+
 static const int PIR_PIN = 13;
 static const int LED_PIN = 2;
 
 static const int  WDT_TIMEOUT_SEC = 30;
-static const char* FW_VERSION = "2.4.0-DPS";
+static const char* FW_VERSION = "3.0.0";
 
 void setup() {
   Serial.begin(115200);
@@ -51,9 +64,9 @@ void setup() {
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   
   Serial.printf("[WiFi] Connexion à %s...\n", WIFI_SSID);
-  
+
   unsigned long wifiStart = millis();
-  while (WiFi.status() != WL_CONNECTED && (millis() - wifiStart < 30000)) {
+  while (WiFi.status() != WL_CONNECTED && !hasElapsed(wifiStart, 30000)) {
     delay(500);
     Serial.print(".");
     esp_task_wdt_reset();
@@ -81,7 +94,7 @@ void setup() {
   tzset();
 
   unsigned long ntpStart = millis();
-  while (time(nullptr) < 1000000000 && (millis() - ntpStart < 15000)) {
+  while (time(nullptr) < 1000000000 && !hasElapsed(ntpStart, 15000)) {
     delay(100);
     esp_task_wdt_reset();
   }
