@@ -1,0 +1,12 @@
+# Particle build artifacts
+target/
+.vscode/
+*.bin
+
+# Secrets
+src/secrets.h
+*.backup
+
+# OS files
+.DS_Store
+Thumbs.db
