@@ -3,7 +3,6 @@
 // ============================================
 
 #include "config_store.h"
-#include <EEPROM.h>
 
 static DeviceConfig cfg;
 
