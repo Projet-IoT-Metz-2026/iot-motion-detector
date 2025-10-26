@@ -84,3 +84,15 @@ artifacts/
 
 # Node modules
 node_modules/
+
+# ===================================================================
+# INFRASTRUCTURE OUTPUTS
+# ===================================================================
+
+# Azure deployment outputs
+infrastructure/deployment-output.json
+infrastructure/*.log
+infrastructure/.azure/
+
+# Backup files
+*.backup
