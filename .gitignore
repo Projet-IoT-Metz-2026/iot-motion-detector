@@ -36,6 +36,7 @@ Desktop.ini
 .idea/
 *.sublime-*
 **/.history
+.claude/
 
 # ===================================================================
 # RÈGLES .NET / BACKEND (Azure Functions)
