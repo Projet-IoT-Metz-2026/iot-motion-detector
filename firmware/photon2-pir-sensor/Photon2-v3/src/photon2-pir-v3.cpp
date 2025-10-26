@@ -18,7 +18,6 @@
 // les bibliothèques MQTT TLS sont limitées sur Device OS
 
 #include "Particle.h"
-#include "ArduinoJson.h"
 #include "config.h"
 #include "config_store.h"
 #include "secrets.h"
@@ -242,24 +241,20 @@ bool azurePublishTelemetry(const char* payload) {
 }
 
 void publishMotionDetection() {
-    StaticJsonDocument<TELEMETRY_BUFFER_SIZE> doc;
+    char output[TELEMETRY_BUFFER_SIZE];
 
-    // Event data
-    doc["event"] = "motion_detected";
-    doc["count"] = configGetDetectionCount();
-    doc["timestamp"] = Time.now();
+    // Build JSON manually (Particle String doesn't have write() method)
+    snprintf(output, sizeof(output),
+             "{\"event\":\"motion_detected\",\"count\":%lu,\"timestamp\":%lu,"
+             "\"firmware_version\":\"%s\",\"rssi\":%d,\"freeMemory\":%lu,\"uptime\":%lu}",
+             (unsigned long)configGetDetectionCount(),
+             (unsigned long)Time.now(),
+             FW_VERSION_STR,
+             (int)WiFi.RSSI(),  // Convert WiFiSignal to int
+             (unsigned long)System.freeMemory(),
+             (unsigned long)(millis() / 1000));
 
-    // Enriched telemetry (v3.0.0)
-    doc["firmware_version"] = FW_VERSION_STR;
-    doc["rssi"] = WiFi.RSSI();
-    doc["channel"] = WiFi.channel();
-    doc["freeMemory"] = System.freeMemory();
-    doc["uptime"] = millis() / 1000;
-
-    String output;
-    serializeJson(doc, output);
-
-    azurePublishTelemetry(output.c_str());
+    azurePublishTelemetry(output);
 }
 
 void flushMessageQueue() {
@@ -444,18 +439,17 @@ void loop() {
     // Heartbeat telemetry every 5 minutes
     static unsigned long lastHeartbeat = 0;
     if (hasElapsed(lastHeartbeat, 300000)) {
-        StaticJsonDocument<256> doc;
-        doc["event"] = "heartbeat";
-        doc["uptime"] = millis() / 1000;
-        doc["detectionCount"] = configGetDetectionCount();
-        doc["queueSize"] = queueCount;
-        doc["freeMemory"] = System.freeMemory();
-        doc["rssi"] = WiFi.RSSI();
+        char output[256];
+        snprintf(output, sizeof(output),
+                 "{\"event\":\"heartbeat\",\"uptime\":%lu,\"detectionCount\":%lu,"
+                 "\"queueSize\":%d,\"freeMemory\":%lu,\"rssi\":%d}",
+                 (unsigned long)(millis() / 1000),
+                 (unsigned long)configGetDetectionCount(),
+                 queueCount,
+                 (unsigned long)System.freeMemory(),
+                 (int)WiFi.RSSI());
 
-        String output;
-        serializeJson(doc, output);
-        azurePublishTelemetry(output.c_str());
-
+        azurePublishTelemetry(output);
         lastHeartbeat = millis();
     }
 

@@ -1,0 +1,174 @@
+Compiling code for photon2
+
+Including:
+    project.properties
+    src\config.h
+    src\config_store.cpp
+    src\config_store.h
+    src\photon2-pir-v3.cpp
+    src\secrets.h
+
+Compile failed: Checking library ArduinoJson...
+Installing library ArduinoJson 7.2.0 to lib/ArduinoJson ...
+Library ArduinoJson 7.2.0 installed.
+make -C ../modules/tron/user-part all
+make[1]: Entering directory `/firmware/modules/tron/user-part'
+
+rm -f target/memory_platform_user.ld
+rm -f target/workspace.elf
+mkdir -p target/
+make -f ../../../modules/shared/rtl872x/build_linker_script.mk PREBUILD=1
+make[2]: Entering directory `/firmware/modules/tron/user-part'
+Creating target/memory_platform_user.ld ...
+make[2]: Leaving directory `/firmware/modules/tron/user-part'
+
+make -C ../../../user 
+make[2]: Entering directory `/firmware/user'
+Building cpp file: src/config_store.cpp
+Invoking: ARM GCC CPP Compiler
+mkdir -p ../build/target/user/platform-32-msrc/
+arm-none-eabi-gcc -DMCU_DEVICE -Drtl872x -DCONFIG_PLATFORM_8721D -DPLATFORM_THREADING=1 -DPLATFORM_ID=32 -DPLATFORM_NAME=p2 -DPLATFORM_GEN=3 -DUSBD_VID_PARTICLE=0x2B04 -DUSBD_PID_DFU=0xD020 -DUSBD_PID_CDC=0xC020 -DSPARK_PLATFORM -fno-builtin-puts -fno-builtin-printf -Wl,--wrap=puts -Wl,--wrap=printf -Wl,--wrap=_printf_i -Wl,--wrap=_svfprintf_r -Wl,--wrap=_scanf_i -Wl,--wrap=__ssvfscanf_r -g3 -gdwarf-2 -Os -mcpu=cortex-m33 -march=armv8-m.main+dsp -mthumb -mcmse -mfloat-abi=hard -mfpu=fpv5-sp-d16 -DARM_CPU_CORTEX_M33 --specs=nano.specs -DINCLUDE_PLATFORM=1 -DPRODUCT_ID=32 -DPRODUCT_FIRMWARE_VERSION=65535 -D_WIZCHIP_=W5500 -DUSE_STDPERIPH_DRIVER -DDFU_BUILD_ENABLE -DLFS_CONFIG=lfs_config.h -DSYSTEM_VERSION_STRING=6.3.3 -DRELEASE_BUILD -I./inc -I../wiring/inc -I../system/inc -I../services/inc -I../third_party/nanopb/nanopb -I../communication/inc -I../hal/inc -I../hal/src/tron -I../hal/network/ncp/wifi -I../hal/network/lwip/esp32 -I../hal/network/ncp/wifi -I../hal/src/rtl872x -I../hal/src/portable/FreeRTOS -I../hal/src/rtl872x -I../hal/src/rtl872x/lwip -I../hal/src/rtl872x/freertos -I../hal/src/rtl872x/mbedtls -I../hal/src/rtl872x/littlefs -I../hal -I../hal/src/rtl872x/posix -I../hal/network -I../hal/network/api -I../hal/network/lwip -I../hal/network/lwip/posix -I../hal/network/lwip/wiznet -I../hal/network/ncp -I../hal/network/ncp/at_parser -I../hal/network/util -I../third_party/lwip/lwip/src/include -I../third_party/freertos/freertos/FreeRTOS/Source/include -I../third_party/ambd_sdk/ambd_sdk/component/os/freertos/freertos_v10.2.0/Source/portable/GCC/RTL8721D_HP/non_secure -I../third_party/wiznet_driver/wiznet_driver/Ethernet -I../gsm0710muxer/gsm0710muxer/include -I../hal/shared -I../platform/shared/inc -I../third_party/ambd_sdk -I../third_party/ambd_sdk/ambd_sdk/component/soc/realtek/amebad/cmsis -I../third_party/ambd_sdk/ambd_sdk/component/soc/realtek/amebad/fwlib/include -I../third_party/ambd_sdk/ambd_sdk/component/soc/realtek/amebad/swlib/include -I../third_party/ambd_sdk/ambd_sdk/component/soc/realtek/amebad/app/monitor/include -I../third_party/ambd_sdk/ambd_sdk/component/os/os_dep/include -I../third_party/ambd_sdk/ambd_sdk/component/os/freertos -I../third_party/ambd_sdk/ambd_sdk/component/common/api -I../third_party/ambd_sdk/ambd_sdk/component/common/api/platform -I../third_party/ambd_sdk/ambd_sdk/component/common/api/wifi -I../third_party/ambd_sdk/ambd_sdk/component/soc/realtek/amebad/misc -I../third_party/ambd_sdk/ambd_sdk/component/soc/realtek/amebad -I../third_party/ambd_sdk/ambd_sdk/component/common/drivers/wlan/realtek/include -I../third_party/ambd_sdk/ambd_sdk/component/common/drivers/wlan/realtek/src/osdep -I../third_party/ambd_sdk/ambd_sdk/component/common/drivers/wlan/realtek/src/osdep/freertos -I../third_party/ambd_sdk/ambd_sdk/component/common/bluetooth/realtek/sdk/board/amebad/lib -I../third_party/ambd_sdk/ambd_sdk/component/common/bluetooth/realtek/sdk/board/amebad/src -I../third_party/ambd_sdk/ambd_sdk/component/common/bluetooth/realtek/sdk/board/amebad/src/vendor_cmd -I../third_party/ambd_sdk/ambd_sdk/component/common/bluetooth/realtek/sdk/board/common/inc -I../third_party/ambd_sdk/ambd_sdk/component/common/bluetooth/realtek/sdk/inc/app -I../third_party/ambd_sdk/ambd_sdk/component/common/bluetooth/realtek/sdk/inc/bluetooth/gap -I../third_party/ambd_sdk/ambd_sdk/component/common/bluetooth/realtek/sdk/inc/bluetooth/profile -I../third_party/ambd_sdk/ambd_sdk/component/common/bluetooth/realtek/sdk/inc/bluetooth/profile/client -I../third_party/ambd_sdk/ambd_sdk/component/common/bluetooth/realtek/sdk/inc/bluetooth/profile/server -I../third_party/ambd_sdk/ambd_sdk/component/common/bluetooth/realtek/sdk/inc/os -I../third_party/ambd_sdk/ambd_sdk/component/common/bluetooth/realtek/sdk/inc/platform -I../third_party/ambd_sdk/ambd_sdk/component/common/bluetooth/realtek/sdk/inc/stack -I../third_party/ambd_sdk/ambd_sdk/component/common/api/at_cmd -I../third_party/ambd_sdk/ambd_sdk/component/common/mbed/targets/hal/rtl8721d -I../third_party/ambd_sdk/ambd_sdk/component/common/mbed/hal_ext -I../third_party/ambd_sdk/ambd_sdk/component/common/mbed/hal -I../third_party/ambd_sdk/ambd_sdk/component/common/file_system/fatfs -I../third_party/ambd_sdk/ambd_sdk/component/common/file_system/fatfs/r0.10c/include -I../third_party/ambd_sdk/ambd_sdk/component/common/file_system/ftl -I../third_party/ambd_sdk/ambd_sdk/component/common/drivers/usb/device_new/core -I../third_party/ambd_sdk/ambd_sdk/component/common/drivers/usb/common_new -I../third_party/littlefs/littlefs -I../third_party/miniz/miniz -I../platform/MCU/rtl872x/inc -I../dynalib/inc -I../hal/shared -Isrc -I./libraries -Ilib/ArduinoJson/src -I. -MD -MP -MF ../build/target/user/platform-32-msrc/config_store.o.d -ffunction-sections -fdata-sections -Wall -Wno-switch -fmessage-length=0 -Wno-error=deprecated-declarations -Wno-error=unused-parameter -Wdeprecated-declarations -Wimplicit-fallthrough=2 -Wno-expansion-to-defined -Wno-cast-function-type -Wno-unused-parameter -Wno-error=type-limits -fno-strict-aliasing -DSPARK=1 -DPARTICLE=1 -Werror=return-type -Wundef -DSTART_DFU_FLASHER_SERIAL_SPEED=14400 -DSPARK_PLATFORM_NET=rtl872x -fno-builtin-malloc -fno-builtin-free -fno-builtin-realloc  -DLOG_INCLUDE_SOURCE_INFO=1 -DPARTICLE_USER_MODULE -DMODULAR_FIRMWARE=1 -DMODULE_VERSION=6 -DMODULE_FUNCTION=5 -DMODULE_INDEX=1 -DMODULE_DEPENDENCY=4,1,6304 -DMODULE_DEPENDENCY2=0,0,0 -D_GNU_SOURCE -DLOG_MODULE_CATEGORY="\"app\""  -fno-exceptions -fno-rtti -fcheck-new -flto -ffat-lto-objects -DPARTICLE_COMPILE_LTO_FAT -fno-use-cxa-atexit -std=gnu++17 -D__FILE_NAME__=\"config_store.cpp\" -c -o ../build/target/user/platform-32-msrc/config_store.o src/config_store.cpp
+
+Building cpp file: src/photon2-pir-v3.cpp
+Invoking: ARM GCC CPP Compiler
+mkdir -p ../build/target/user/platform-32-msrc/
+arm-none-eabi-gcc -DMCU_DEVICE -Drtl872x -DCONFIG_PLATFORM_8721D -DPLATFORM_THREADING=1 -DPLATFORM_ID=32 -DPLATFORM_NAME=p2 -DPLATFORM_GEN=3 -DUSBD_VID_PARTICLE=0x2B04 -DUSBD_PID_DFU=0xD020 -DUSBD_PID_CDC=0xC020 -DSPARK_PLATFORM -fno-builtin-puts -fno-builtin-printf -Wl,--wrap=puts -Wl,--wrap=printf -Wl,--wrap=_printf_i -Wl,--wrap=_svfprintf_r -Wl,--wrap=_scanf_i -Wl,--wrap=__ssvfscanf_r -g3 -gdwarf-2 -Os -mcpu=cortex-m33 -march=armv8-m.main+dsp -mthumb -mcmse -mfloat-abi=hard -mfpu=fpv5-sp-d16 -DARM_CPU_CORTEX_M33 --specs=nano.specs -DINCLUDE_PLATFORM=1 -DPRODUCT_ID=32 -DPRODUCT_FIRMWARE_VERSION=65535 -D_WIZCHIP_=W5500 -DUSE_STDPERIPH_DRIVER -DDFU_BUILD_ENABLE -DLFS_CONFIG=lfs_config.h -DSYSTEM_VERSION_STRING=6.3.3 -DRELEASE_BUILD -I./inc -I../wiring/inc -I../system/inc -I../services/inc -I../third_party/nanopb/nanopb -I../communication/inc -I../hal/inc -I../hal/src/tron -I../hal/network/ncp/wifi -I../hal/network/lwip/esp32 -I../hal/network/ncp/wifi -I../hal/src/rtl872x -I../hal/src/portable/FreeRTOS -I../hal/src/rtl872x -I../hal/src/rtl872x/lwip -I../hal/src/rtl872x/freertos -I../hal/src/rtl872x/mbedtls -I../hal/src/rtl872x/littlefs -I../hal -I../hal/src/rtl872x/posix -I../hal/network -I../hal/network/api -I../hal/network/lwip -I../hal/network/lwip/posix -I../hal/network/lwip/wiznet -I../hal/network/ncp -I../hal/network/ncp/at_parser -I../hal/network/util -I../third_party/lwip/lwip/src/include -I../third_party/freertos/freertos/FreeRTOS/Source/include -I../third_party/ambd_sdk/ambd_sdk/component/os/freertos/freertos_v10.2.0/Source/portable/GCC/RTL8721D_HP/non_secure -I../third_party/wiznet_driver/wiznet_driver/Ethernet -I../gsm0710muxer/gsm0710muxer/include -I../hal/shared -I../platform/shared/inc -I../third_party/ambd_sdk -I../third_party/ambd_sdk/ambd_sdk/component/soc/realtek/amebad/cmsis -I../third_party/ambd_sdk/ambd_sdk/component/soc/realtek/amebad/fwlib/include -I../third_party/ambd_sdk/ambd_sdk/component/soc/realtek/amebad/swlib/include -I../third_party/ambd_sdk/ambd_sdk/component/soc/realtek/amebad/app/monitor/include -I../third_party/ambd_sdk/ambd_sdk/component/os/os_dep/include -I../third_party/ambd_sdk/ambd_sdk/component/os/freertos -I../third_party/ambd_sdk/ambd_sdk/component/common/api -I../third_party/ambd_sdk/ambd_sdk/component/common/api/platform -I../third_party/ambd_sdk/ambd_sdk/component/common/api/wifi -I../third_party/ambd_sdk/ambd_sdk/component/soc/realtek/amebad/misc -I../third_party/ambd_sdk/ambd_sdk/component/soc/realtek/amebad -I../third_party/ambd_sdk/ambd_sdk/component/common/drivers/wlan/realtek/include -I../third_party/ambd_sdk/ambd_sdk/component/common/drivers/wlan/realtek/src/osdep -I../third_party/ambd_sdk/ambd_sdk/component/common/drivers/wlan/realtek/src/osdep/freertos -I../third_party/ambd_sdk/ambd_sdk/component/common/bluetooth/realtek/sdk/board/amebad/lib -I../third_party/ambd_sdk/ambd_sdk/component/common/bluetooth/realtek/sdk/board/amebad/src -I../third_party/ambd_sdk/ambd_sdk/component/common/bluetooth/realtek/sdk/board/amebad/src/vendor_cmd -I../third_party/ambd_sdk/ambd_sdk/component/common/bluetooth/realtek/sdk/board/common/inc -I../third_party/ambd_sdk/ambd_sdk/component/common/bluetooth/realtek/sdk/inc/app -I../third_party/ambd_sdk/ambd_sdk/component/common/bluetooth/realtek/sdk/inc/bluetooth/gap -I../third_party/ambd_sdk/ambd_sdk/component/common/bluetooth/realtek/sdk/inc/bluetooth/profile -I../third_party/ambd_sdk/ambd_sdk/component/common/bluetooth/realtek/sdk/inc/bluetooth/profile/client -I../third_party/ambd_sdk/ambd_sdk/component/common/bluetooth/realtek/sdk/inc/bluetooth/profile/server -I../third_party/ambd_sdk/ambd_sdk/component/common/bluetooth/realtek/sdk/inc/os -I../third_party/ambd_sdk/ambd_sdk/component/common/bluetooth/realtek/sdk/inc/platform -I../third_party/ambd_sdk/ambd_sdk/component/common/bluetooth/realtek/sdk/inc/stack -I../third_party/ambd_sdk/ambd_sdk/component/common/api/at_cmd -I../third_party/ambd_sdk/ambd_sdk/component/common/mbed/targets/hal/rtl8721d -I../third_party/ambd_sdk/ambd_sdk/component/common/mbed/hal_ext -I../third_party/ambd_sdk/ambd_sdk/component/common/mbed/hal -I../third_party/ambd_sdk/ambd_sdk/component/common/file_system/fatfs -I../third_party/ambd_sdk/ambd_sdk/component/common/file_system/fatfs/r0.10c/include -I../third_party/ambd_sdk/ambd_sdk/component/common/file_system/ftl -I../third_party/ambd_sdk/ambd_sdk/component/common/drivers/usb/device_new/core -I../third_party/ambd_sdk/ambd_sdk/component/common/drivers/usb/common_new -I../third_party/littlefs/littlefs -I../third_party/miniz/miniz -I../platform/MCU/rtl872x/inc -I../dynalib/inc -I../hal/shared -Isrc -I./libraries -Ilib/ArduinoJson/src -I. -MD -MP -MF ../build/target/user/platform-32-msrc/photon2-pir-v3.o.d -ffunction-sections -fdata-sections -Wall -Wno-switch -fmessage-length=0 -Wno-error=deprecated-declarations -Wno-error=unused-parameter -Wdeprecated-declarations -Wimplicit-fallthrough=2 -Wno-expansion-to-defined -Wno-cast-function-type -Wno-unused-parameter -Wno-error=type-limits -fno-strict-aliasing -DSPARK=1 -DPARTICLE=1 -Werror=return-type -Wundef -DSTART_DFU_FLASHER_SERIAL_SPEED=14400 -DSPARK_PLATFORM_NET=rtl872x -fno-builtin-malloc -fno-builtin-free -fno-builtin-realloc  -DLOG_INCLUDE_SOURCE_INFO=1 -DPARTICLE_USER_MODULE -DMODULAR_FIRMWARE=1 -DMODULE_VERSION=6 -DMODULE_FUNCTION=5 -DMODULE_INDEX=1 -DMODULE_DEPENDENCY=4,1,6304 -DMODULE_DEPENDENCY2=0,0,0 -D_GNU_SOURCE -DLOG_MODULE_CATEGORY="\"app\""  -fno-exceptions -fno-rtti -fcheck-new -flto -ffat-lto-objects -DPARTICLE_COMPILE_LTO_FAT -fno-use-cxa-atexit -std=gnu++17 -D__FILE_NAME__=\"photon2-pir-v3.cpp\" -c -o ../build/target/user/platform-32-msrc/photon2-pir-v3.o src/photon2-pir-v3.cpp
+src/photon2-pir-v3.cpp:31:13: warning: System thread is enabled by default starting with Device OS 6.2.0. SYSTEM_THREAD(DISABLED) may still be explicitly called, however non-threaded behavior is soon to be completely deprecated in later releases.
+   31 | SYSTEM_THREAD(ENABLED);
+      |             ^~~~~~~~~~~                                                                                                                                                                                                      
+src/photon2-pir-v3.cpp: In function 'void pirLoop()':
+src/photon2-pir-v3.cpp:194:56: warning: format '%u' expects argument of type 'unsigned int', but argument 3 has type 'uint32_t' {aka 'long unsigned int'} [-Wformat=]
+  194 |                     Log.info("Motion detected! Count: %u", configGetDetectionCount());
+      |                                                       ~^   ~~~~~~~~~~~~~~~~~~~~~~~~~
+      |                                                        |                          |
+      |                                                        unsigned int               uint32_t {aka long unsigned int}
+      |                                                       %lu
+src/photon2-pir-v3.cpp: In function 'void publishMotionDetection()':
+src/photon2-pir-v3.cpp:245:5: warning: 'template<unsigned int N> class ArduinoJson::V720HB22::StaticJsonDocument' is deprecated: use JsonDocument instead [-Wdeprecated-declarations]
+  245 |     StaticJsonDocument<TELEMETRY_BUFFER_SIZE> doc;
+      |     ^~~~~~~~~~~~~~~~~~
+In file included from lib/ArduinoJson/src/ArduinoJson.hpp:56,
+                 from lib/ArduinoJson/src/ArduinoJson.h:9,
+                 from src/photon2-pir-v3.cpp:21:
+lib/ArduinoJson/src/ArduinoJson/compatibility.hpp:63:58: note: declared here
+   63 | class ARDUINOJSON_DEPRECATED("use JsonDocument instead") StaticJsonDocument
+      |                                                          ^~~~~~~~~~~~~~~~~~
+src/photon2-pir-v3.cpp:255:27: error: 'class spark::WiFiClass' has no member named 'channel'
+  255 |     doc["channel"] = WiFi.channel();
+      |                           ^~~~~~~
+src/photon2-pir-v3.cpp: In function 'void loop()':
+src/photon2-pir-v3.cpp:447:9: warning: 'template<unsigned int N> class ArduinoJson::V720HB22::StaticJsonDocument' is deprecated: use JsonDocument instead [-Wdeprecated-declarations]
+  447 |         StaticJsonDocument<256> doc;
+      |         ^~~~~~~~~~~~~~~~~~
+In file included from lib/ArduinoJson/src/ArduinoJson.hpp:56,
+                 from lib/ArduinoJson/src/ArduinoJson.h:9,
+                 from src/photon2-pir-v3.cpp:21:
+lib/ArduinoJson/src/ArduinoJson/compatibility.hpp:63:58: note: declared here
+   63 | class ARDUINOJSON_DEPRECATED("use JsonDocument instead") StaticJsonDocument
+      |                                                          ^~~~~~~~~~~~~~~~~~
+In file included from lib/ArduinoJson/src/ArduinoJson.hpp:42,
+                 from lib/ArduinoJson/src/ArduinoJson.h:9,
+                 from src/photon2-pir-v3.cpp:21:
+lib/ArduinoJson/src/ArduinoJson/Variant/ConverterImpl.hpp: In instantiation of 'static void ArduinoJson::V720HB22::Converter<T, Enable>::toJson(const T&, ArduinoJson::V720HB22::JsonVariant) [with T = WiFiSignal; Enable = void]':
+lib/ArduinoJson/src/ArduinoJson/Variant/VariantRefBaseImpl.hpp:142:21:   required from 'bool ArduinoJson::V720HB22::detail::VariantRefBase<TDerived>::doSet(T&&, ArduinoJson::V720HB22::detail::false_type) const [with TConverter = ArduinoJson::V720HB22::Converter<WiFiSignal, void>; T = const WiFiSignal&; TDerived = ArduinoJson::V720HB22::detail::MemberProxy<ArduinoJson::V720HB22::JsonDocument&, const char*>; ArduinoJson::V720HB22::detail::false_type = ArduinoJson::V720HB22::detail::integral_constant<bool, false>]'
+lib/ArduinoJson/src/ArduinoJson/Variant/VariantRefBase.hpp:298:29:   required from 'bool ArduinoJson::V720HB22::detail::VariantRefBase<TDerived>::doSet(T&&) const [with TConverter = ArduinoJson::V720HB22::Converter<WiFiSignal, void>; T = const WiFiSignal&; TDerived = ArduinoJson::V720HB22::detail::MemberProxy<ArduinoJson::V720HB22::JsonDocument&, const char*>]'
+lib/ArduinoJson/src/ArduinoJson/Variant/VariantRefBase.hpp:80:44:   required from 'bool ArduinoJson::V720HB22::detail::VariantRefBase<TDerived>::set(const T&) const [with T = WiFiSignal; TDerived = ArduinoJson::V720HB22::detail::MemberProxy<ArduinoJson::V720HB22::JsonDocument&, const char*>]'
+lib/ArduinoJson/src/ArduinoJson/Object/MemberProxy.hpp:33:14:   required from 'ArduinoJson::V720HB22::detail::MemberProxy< <template-parameter-1-1>, <template-parameter-1-2> >& ArduinoJson::V720HB22::detail::MemberProxy< <template-parameter-1-1>, <template-parameter-1-2> >::operator=(const T&) [with T = WiFiSignal; TUpstream = ArduinoJson::V720HB22::JsonDocument&; TStringRef = const char*]'
+src/photon2-pir-v3.cpp:254:29:   required from here
+lib/ArduinoJson/src/ArduinoJson/Variant/ConverterImpl.hpp:30:18: error: no matching function for call to 'convertToJson(const WiFiSignal&, ArduinoJson::V720HB22::JsonVariant&)'
+   30 |     convertToJson(src, dst); // Error here? See https://arduinojson.org/v7/unsupported-set/
+      |     ~~~~~~~~~~~~~^~~~~~~~~~
+In file included from lib/ArduinoJson/src/ArduinoJson.hpp:33,
+                 from lib/ArduinoJson/src/ArduinoJson.h:9,
+                 from src/photon2-pir-v3.cpp:21:
+lib/ArduinoJson/src/ArduinoJson/Document/JsonDocument.hpp:402:13: note: candidate: 'void ArduinoJson::V720HB22::convertToJson(const ArduinoJson::V720HB22::JsonDocument&, ArduinoJson::V720HB22::JsonVariant)'
+  402 | inline void convertToJson(const JsonDocument& src, JsonVariant dst) {
+      |             ^~~~~~~~~~~~~
+lib/ArduinoJson/src/ArduinoJson/Document/JsonDocument.hpp:402:47: note:   no known conversion for argument 1 from 'const WiFiSignal' to 'const ArduinoJson::V720HB22::JsonDocument&'
+  402 | inline void convertToJson(const JsonDocument& src, JsonVariant dst) {
+      |                           ~~~~~~~~~~~~~~~~~~~~^~~
+In file included from lib/ArduinoJson/src/ArduinoJson.hpp:42,
+                 from lib/ArduinoJson/src/ArduinoJson.h:9,
+                 from src/photon2-pir-v3.cpp:21:
+lib/ArduinoJson/src/ArduinoJson/Variant/ConverterImpl.hpp:191:56: note: candidate: 'template<class T> ArduinoJson::V720HB22::detail::enable_if_t<ArduinoJson::V720HB22::detail::IsString<TString>::value> ArduinoJson::V720HB22::convertToJson(const T&, ArduinoJson::V720HB22::JsonVariant)'
+  191 | inline detail::enable_if_t<detail::IsString<T>::value> convertToJson(
+      |                                                        ^~~~~~~~~~~~~
+lib/ArduinoJson/src/ArduinoJson/Variant/ConverterImpl.hpp:191:56: note:   template argument deduction/substitution failed:
+In file included from lib/ArduinoJson/src/ArduinoJson/Polyfills/type_traits.hpp:8,
+                 from lib/ArduinoJson/src/ArduinoJson/Polyfills/utility.hpp:7,
+                 from lib/ArduinoJson/src/ArduinoJson/Memory/MemoryPoolList.hpp:9,
+                 from lib/ArduinoJson/src/ArduinoJson/Memory/ResourceManager.hpp:8,
+                 from lib/ArduinoJson/src/ArduinoJson/Variant/JsonVariantConst.hpp:10,
+                 from lib/ArduinoJson/src/ArduinoJson/Variant/VariantRefBase.hpp:9,
+                 from lib/ArduinoJson/src/ArduinoJson/Array/ElementProxy.hpp:7,
+                 from lib/ArduinoJson/src/ArduinoJson/Array/JsonArray.hpp:7,
+                 from lib/ArduinoJson/src/ArduinoJson.hpp:29,
+                 from lib/ArduinoJson/src/ArduinoJson.h:9,
+                 from src/photon2-pir-v3.cpp:21:
+lib/ArduinoJson/src/ArduinoJson/Polyfills/type_traits/enable_if.hpp: In substitution of 'template<bool Condition, class T> using enable_if_t = typename ArduinoJson::V720HB22::detail::enable_if::type [with bool Condition = false; T = void]':
+lib/ArduinoJson/src/ArduinoJson/Variant/ConverterImpl.hpp:191:56:   required by substitution of 'template<class T> ArduinoJson::V720HB22::detail::enable_if_t<ArduinoJson::V720HB22::detail::IsString<TString>::value> ArduinoJson::V720HB22::convertToJson(const T&, ArduinoJson::V720HB22::JsonVariant) [with T = WiFiSignal]'
+lib/ArduinoJson/src/ArduinoJson/Variant/ConverterImpl.hpp:30:18:   required from 'static void ArduinoJson::V720HB22::Converter<T, Enable>::toJson(const T&, ArduinoJson::V720HB22::JsonVariant) [with T = WiFiSignal; Enable = void]'
+lib/ArduinoJson/src/ArduinoJson/Variant/VariantRefBaseImpl.hpp:142:21:   required from 'bool ArduinoJson::V720HB22::detail::VariantRefBase<TDerived>::doSet(T&&, ArduinoJson::V720HB22::detail::false_type) const [with TConverter = ArduinoJson::V720HB22::Converter<WiFiSignal, void>; T = const WiFiSignal&; TDerived = ArduinoJson::V720HB22::detail::MemberProxy<ArduinoJson::V720HB22::JsonDocument&, const char*>; ArduinoJson::V720HB22::detail::false_type = ArduinoJson::V720HB22::detail::integral_constant<bool, false>]'
+lib/ArduinoJson/src/ArduinoJson/Variant/VariantRefBase.hpp:298:29:   required from 'bool ArduinoJson::V720HB22::detail::VariantRefBase<TDerived>::doSet(T&&) const [with TConverter = ArduinoJson::V720HB22::Converter<WiFiSignal, void>; T = const WiFiSignal&; TDerived = ArduinoJson::V720HB22::detail::MemberProxy<ArduinoJson::V720HB22::JsonDocument&, const char*>]'
+lib/ArduinoJson/src/ArduinoJson/Variant/VariantRefBase.hpp:80:44:   required from 'bool ArduinoJson::V720HB22::detail::VariantRefBase<TDerived>::set(const T&) const [with T = WiFiSignal; TDerived = ArduinoJson::V720HB22::detail::MemberProxy<ArduinoJson::V720HB22::JsonDocument&, const char*>]'
+lib/ArduinoJson/src/ArduinoJson/Object/MemberProxy.hpp:33:14:   required from 'ArduinoJson::V720HB22::detail::MemberProxy< <template-parameter-1-1>, <template-parameter-1-2> >& ArduinoJson::V720HB22::detail::MemberProxy< <template-parameter-1-1>, <template-parameter-1-2> >::operator=(const T&) [with T = WiFiSignal; TUpstream = ArduinoJson::V720HB22::JsonDocument&; TStringRef = const char*]'
+src/photon2-pir-v3.cpp:254:29:   required from here
+lib/ArduinoJson/src/ArduinoJson/Polyfills/type_traits/enable_if.hpp:21:7: error: no type named 'type' in 'struct ArduinoJson::V720HB22::detail::enable_if<false, void>'
+   21 | using enable_if_t = typename enable_if<Condition, T>::type;
+      |       ^~~~~~~~~~~
+In file included from lib/ArduinoJson/src/ArduinoJson.hpp:46,
+                 from lib/ArduinoJson/src/ArduinoJson.h:9,
+                 from src/photon2-pir-v3.cpp:21:
+lib/ArduinoJson/src/ArduinoJson/Variant/ConverterImpl.hpp: In instantiation of 'static void ArduinoJson::V720HB22::Converter<T, Enable>::toJson(const T&, ArduinoJson::V720HB22::JsonVariant) [with T = WiFiSignal; Enable = void]':
+lib/ArduinoJson/src/ArduinoJson/Variant/VariantRefBaseImpl.hpp:142:21:   required from 'bool ArduinoJson::V720HB22::detail::VariantRefBase<TDerived>::doSet(T&&, ArduinoJson::V720HB22::detail::false_type) const [with TConverter = ArduinoJson::V720HB22::Converter<WiFiSignal, void>; T = const WiFiSignal&; TDerived = ArduinoJson::V720HB22::detail::MemberProxy<ArduinoJson::V720HB22::JsonDocument&, const char*>; ArduinoJson::V720HB22::detail::false_type = ArduinoJson::V720HB22::detail::integral_constant<bool, false>]'
+lib/ArduinoJson/src/ArduinoJson/Variant/VariantRefBase.hpp:298:29:   required from 'bool ArduinoJson::V720HB22::detail::VariantRefBase<TDerived>::doSet(T&&) const [with TConverter = ArduinoJson::V720HB22::Converter<WiFiSignal, void>; T = const WiFiSignal&; TDerived = ArduinoJson::V720HB22::detail::MemberProxy<ArduinoJson::V720HB22::JsonDocument&, const char*>]'
+lib/ArduinoJson/src/ArduinoJson/Variant/VariantRefBase.hpp:80:44:   required from 'bool ArduinoJson::V720HB22::detail::VariantRefBase<TDerived>::set(const T&) const [with T = WiFiSignal; TDerived = ArduinoJson::V720HB22::detail::MemberProxy<ArduinoJson::V720HB22::JsonDocument&, const char*>]'
+lib/ArduinoJson/src/ArduinoJson/Object/MemberProxy.hpp:33:14:   required from 'ArduinoJson::V720HB22::detail::MemberProxy< <template-parameter-1-1>, <template-parameter-1-2> >& ArduinoJson::V720HB22::detail::MemberProxy< <template-parameter-1-1>, <template-parameter-1-2> >::operator=(const T&) [with T = WiFiSignal; TUpstream = ArduinoJson::V720HB22::JsonDocument&; TStringRef = const char*]'
+src/photon2-pir-v3.cpp:254:29:   required from here
+lib/ArduinoJson/src/ArduinoJson/Variant/VariantRefBaseImpl.hpp:64:13: note: candidate: 'template<class TDerived> void ArduinoJson::V720HB22::detail::convertToJson(const ArduinoJson::V720HB22::detail::VariantRefBase<TDerived>&, ArduinoJson::V720HB22::JsonVariant)'
+   64 | inline void convertToJson(const VariantRefBase<TDerived>& src,
+      |             ^~~~~~~~~~~~~
+lib/ArduinoJson/src/ArduinoJson/Variant/VariantRefBaseImpl.hpp:64:13: note:   template argument deduction/substitution failed:
+In file included from lib/ArduinoJson/src/ArduinoJson.hpp:42,
+                 from lib/ArduinoJson/src/ArduinoJson.h:9,
+                 from src/photon2-pir-v3.cpp:21:
+lib/ArduinoJson/src/ArduinoJson/Variant/ConverterImpl.hpp:30:18: note:   'const WiFiSignal' is not derived from 'const ArduinoJson::V720HB22::detail::VariantRefBase<TDerived>'
+   30 |     convertToJson(src, dst); // Error here? See https://arduinojson.org/v7/unsupported-set/
+      |     ~~~~~~~~~~~~~^~~~~~~~~~
+In file included from lib/ArduinoJson/src/ArduinoJson/Serialization/serialize.hpp:7,
+                 from lib/ArduinoJson/src/ArduinoJson/Json/JsonSerializer.hpp:9,
+                 from lib/ArduinoJson/src/ArduinoJson/Variant/ConverterImpl.hpp:7,
+                 from lib/ArduinoJson/src/ArduinoJson.hpp:42,
+                 from lib/ArduinoJson/src/ArduinoJson.h:9,
+                 from src/photon2-pir-v3.cpp:21:
+lib/ArduinoJson/src/ArduinoJson/Serialization/Writer.hpp: In instantiation of 'size_t ArduinoJson::V720HB22::detail::Writer<TDestination, Enable>::write(const uint8_t*, size_t) [with TDestination = String; Enable = void; size_t = unsigned int; uint8_t = unsigned char]':
+lib/ArduinoJson/src/ArduinoJson/Serialization/CountingDecorator.hpp:21:28:   required from 'void ArduinoJson::V720HB22::detail::CountingDecorator<TWriter>::write(const uint8_t*, size_t) [with TWriter = ArduinoJson::V720HB22::detail::Writer<String, void>; uint8_t = unsigned char; size_t = unsigned int]'
+lib/ArduinoJson/src/ArduinoJson/Json/TextFormatter.hpp:153:18:   required from 'void ArduinoJson::V720HB22::detail::TextFormatter<TWriter>::writeRaw(const char*) [with TWriter = ArduinoJson::V720HB22::detail::Writer<String, void>]'
+lib/ArduinoJson/src/ArduinoJson/Json/JsonSerializer.hpp:102:24:   required from 'size_t ArduinoJson::V720HB22::detail::JsonSerializer<TWriter>::visit(ArduinoJson::V720HB22::detail::nullptr_t) [with TWriter = ArduinoJson::V720HB22::detail::Writer<String, void>; size_t = unsigned int; ArduinoJson::V720HB22::detail::nullptr_t = std::nullptr_t]'
+lib/ArduinoJson/src/ArduinoJson/Variant/VariantData.hpp:107:25:   required from 'static typename TVisitor::result_type ArduinoJson::V720HB22::detail::VariantData::accept(const ArduinoJson::V720HB22::detail::VariantData*, const ArduinoJson::V720HB22::detail::ResourceManager*, TVisitor&) [with TVisitor = ArduinoJson::V720HB22::detail::JsonSerializer<ArduinoJson::V720HB22::detail::Writer<String, void> >; typename TVisitor::result_type = unsigned int]'
+lib/ArduinoJson/src/ArduinoJson/Serialization/serialize.hpp:16:29:   required from 'size_t ArduinoJson::V720HB22::detail::doSerialize(ArduinoJson::V720HB22::JsonVariantConst, TWriter) [with TSerializer = ArduinoJson::V720HB22::detail::JsonSerializer; TWriter = ArduinoJson::V720HB22::detail::Writer<String, void>; size_t = unsigned int]'
+lib/ArduinoJson/src/ArduinoJson/Serialization/serialize.hpp:23:34:   required from 'size_t ArduinoJson::V720HB22::detail::serialize(ArduinoJson::V720HB22::JsonVariantConst, TDestination&) [with TSerializer = ArduinoJson::V720HB22::detail::JsonSerializer; TDestination = String; size_t = unsigned int]'
+lib/ArduinoJson/src/ArduinoJson/Json/JsonSerializer.hpp:136:35:   required from 'ArduinoJson::V720HB22::detail::enable_if_t<(! ArduinoJson::V720HB22::detail::is_pointer<T>::value), unsigned int> ArduinoJson::V720HB22::serializeJson(ArduinoJson::V720HB22::JsonVariantConst, TDestination&) [with TDestination = String; ArduinoJson::V720HB22::detail::enable_if_t<(! ArduinoJson::V720HB22::detail::is_pointer<T>::value), unsigned int> = unsigned int]'
+src/photon2-pir-v3.cpp:260:30:   required from here
+lib/ArduinoJson/src/ArduinoJson/Serialization/Writer.hpp:22:19: error: 'class String' has no member named 'write'
+   22 |     return dest_->write(s, n);
+      |            ~~~~~~~^~~~~
+lib/ArduinoJson/src/ArduinoJson/Serialization/Writer.hpp: In instantiation of 'size_t ArduinoJson::V720HB22::detail::Writer<TDestination, Enable>::write(uint8_t) [with TDestination = String; Enable = void; size_t = unsigned int; uint8_t = unsigned char]':
+lib/ArduinoJson/src/ArduinoJson/Serialization/CountingDecorator.hpp:17:28:   required from 'void ArduinoJson::V720HB22::detail::CountingDecorator<TWriter>::write(uint8_t) [with TWriter = ArduinoJson::V720HB22::detail::Writer<String, void>; uint8_t = unsigned char]'
+lib/ArduinoJson/src/ArduinoJson/Json/TextFormatter.hpp:170:18:   required from 'void ArduinoJson::V720HB22::detail::TextFormatter<TWriter>::writeRaw(char) [with TWriter = ArduinoJson::V720HB22::detail::Writer<String, void>]'
+lib/ArduinoJson/src/ArduinoJson/Json/JsonSerializer.hpp:112:24:   required from 'void ArduinoJson::V720HB22::detail::JsonSerializer<TWriter>::write(char) [with TWriter = ArduinoJson::V720HB22::detail::Writer<String, void>]'
+lib/ArduinoJson/src/ArduinoJson/Json/JsonSerializer.hpp:23:10:   required from 'size_t ArduinoJson::V720HB22::detail::JsonSerializer<TWriter>::visit(const ArduinoJson::V720HB22::detail::ArrayData&) [with TWriter = ArduinoJson::V720HB22::detail::Writer<String, void>; size_t = unsigned int]'
+lib/ArduinoJson/src/ArduinoJson/Variant/VariantData.hpp:61:27:   required from 'typename TVisitor::result_type ArduinoJson::V720HB22::detail::VariantData::accept(TVisitor&, const ArduinoJson::V720HB22::detail::ResourceManager*) const [with TVisitor = ArduinoJson::V720HB22::detail::JsonSerializer<ArduinoJson::V720HB22::detail::Writer<String, void> >; typename TVisitor::result_type = unsigned int]'
+lib/ArduinoJson/src/ArduinoJson/Variant/VariantData.hpp:105:25:   required from 'static typename TVisitor::result_type ArduinoJson::V720HB22::detail::VariantData::accept(const ArduinoJson::V720HB22::detail::VariantData*, const ArduinoJson::V720HB22::detail::ResourceManager*, TVisitor&) [with TVisitor = ArduinoJson::V720HB22::detail::JsonSerializer<ArduinoJson::V720HB22::detail::Writer<String, void> >; typename TVisitor::result_type = unsigned int]'
+lib/ArduinoJson/src/ArduinoJson/Serialization/serialize.hpp:16:29:   required from 'size_t ArduinoJson::V720HB22::detail::doSerialize(ArduinoJson::V720HB22::JsonVariantConst, TWriter) [with TSerializer = ArduinoJson::V720HB22::detail::JsonSerializer; TWriter = ArduinoJson::V720HB22::detail::Writer<String, void>; size_t = unsigned int]'
+lib/ArduinoJson/src/ArduinoJson/Serialization/serialize.hpp:23:34:   required from 'size_t ArduinoJson::V720HB22::detail::serialize(ArduinoJson::V720HB22::JsonVariantConst, TDestination&) [with TSerializer = ArduinoJson::V720HB22::detail::JsonSerializer; TDestination = String; size_t = unsigned int]'
+lib/ArduinoJson/src/ArduinoJson/Json/JsonSerializer.hpp:136:35:   required from 'ArduinoJson::V720HB22::detail::enable_if_t<(! ArduinoJson::V720HB22::detail::is_pointer<T>::value), unsigned int> ArduinoJson::V720HB22::serializeJson(ArduinoJson::V720HB22::JsonVariantConst, TDestination&) [with TDestination = String; ArduinoJson::V720HB22::detail::enable_if_t<(! ArduinoJson::V720HB22::detail::is_pointer<T>::value), unsigned int> = unsigned int]'
+src/photon2-pir-v3.cpp:260:30:   required from here
+lib/ArduinoJson/src/ArduinoJson/Serialization/Writer.hpp:18:19: error: 'class String' has no member named 'write'
+   18 |     return dest_->write(c);
+      |            ~~~~~~~^~~~~
+make[2]: *** [../build/target/user/platform-32-msrc/photon2-pir-v3.o] Error 1
+make[2]: Leaving directory `/firmware/user'
+make[1]: *** [user] Error 2
+make[1]: Leaving directory `/firmware/modules/tron/user-part'
+make: *** [modules/tron/user-part] Error 2
