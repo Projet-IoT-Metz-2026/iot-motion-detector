@@ -36,5 +36,7 @@ app.MapControllerRoute(
     pattern: "{controller=Home}/{action=Index}/{id?}")
     .WithStaticAssets();
 
+// Map SignalR Hub
+app.MapHub<IoTDetectorDashboard.Hubs.SensorHub>("/sensorHub");
 
 app.Run();
