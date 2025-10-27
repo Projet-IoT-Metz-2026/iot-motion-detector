@@ -17,15 +17,6 @@ RUN dotnet publish IoTDetectorDashboard.csproj -c Release -o /app/publish --no-r
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
 WORKDIR /app
 
-# Install Particle CLI for Photon2 support
-RUN apt-get update && \
-    apt-get install -y curl && \
-    curl -sL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get install -y nodejs && \
-    npm install -g particle-cli && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
 # Copy published app
 COPY --from=build /app/publish .
 
