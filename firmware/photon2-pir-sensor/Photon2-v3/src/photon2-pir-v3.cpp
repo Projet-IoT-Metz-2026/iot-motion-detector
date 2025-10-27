@@ -115,6 +115,12 @@ void messageQueueClear() {
 }
 
 // ============================================
+// FORWARD DECLARATIONS
+// ============================================
+
+void publishMotionDetection();
+
+// ============================================
 // HELPER: millis() overflow safe comparison
 // ============================================
 
@@ -170,7 +176,7 @@ static bool inMotion = false;
 static unsigned long lastPirChange = 0;
 
 void pirSetup() {
-    pinMode(PIR_PIN, INPUT_PULLDOWN);
+    pinMode(PIR_PIN, INPUT);  // Grove PIR v1.2 - no pull resistor needed
 }
 
 void pirLoop() {
@@ -190,11 +196,11 @@ void pirLoop() {
                     sysState.lastMotionTime = now;
                     inMotion = true;
 
-                    Log.info("Motion detected! Count: %u", configGetDetectionCount());
+                    Log.info("Motion detected! Count: %lu", (unsigned long)configGetDetectionCount());
                     digitalWrite(LED_PIN, HIGH);
 
-                    // Publish telemetry (queued if offline)
-                    // Will be implemented in publishTelemetry()
+                    // Publish telemetry
+                    publishMotionDetection();
                 }
             }
 
@@ -282,6 +288,24 @@ void flushMessageQueue() {
 // ============================================
 // CLOUD COMMANDS (Device Twin / C2D equivalent)
 // ============================================
+
+int cloudCmdTestPIR(String args) {
+    // Read current PIR state
+    int pirState = digitalRead(PIR_PIN);
+
+    // Publish test event
+    char testPayload[256];
+    snprintf(testPayload, sizeof(testPayload),
+             "{\"event\":\"test_diagnostic\",\"pirPin_D2\":%d,\"detectionEnabled\":%s,\"cooldownMs\":%lu}",
+             pirState,
+             configGetDetectionEnabled() ? "true" : "false",
+             (unsigned long)configGetCooldown());
+
+    Particle.publish("motion_telemetry", testPayload, PRIVATE);
+    Log.info("Test diagnostic: PIR_PIN=%d", pirState);
+
+    return pirState;  // Returns 0 (LOW) or 1 (HIGH)
+}
 
 int cloudCmdReboot(String args) {
     Log.info("Cloud command: reboot");
@@ -398,6 +422,7 @@ void setup() {
     Log.info("Particle Cloud connected!");
 
     // Register cloud functions
+    Particle.function("testPIR", cloudCmdTestPIR);
     Particle.function("reboot", cloudCmdReboot);
     Particle.function("clearCache", cloudCmdClearCache);
     Particle.function("setDetection", cloudCmdSetDetectionEnabled);
