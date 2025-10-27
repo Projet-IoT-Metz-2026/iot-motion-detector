@@ -15,6 +15,7 @@ local.settings.json
 .env
 *.env
 appsettings.Development.json
+RAILWAY_SETUP.txt
 
 # ===== PlatformIO & Embedded =====
 **/.pio/
