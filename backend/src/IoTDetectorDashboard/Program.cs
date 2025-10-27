@@ -1,32 +1,84 @@
 using IoTDetectorDashboard.Data;
+using IoTDetectorDashboard.Services;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+// Add services to the container
 builder.Services.AddControllersWithViews();
 
-// Add PostgreSQL Database Context
+// Configure Database based on appsettings.json
+var databaseProvider = builder.Configuration["Database:Provider"] ?? "InMemory";
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(connectionString));
+{
+    if (databaseProvider == "PostgreSQL")
+    {
+        options.UseNpgsql(connectionString);
+        builder.Logging.AddConsole();
+        Console.WriteLine($"Using PostgreSQL database: {connectionString?.Split(';')[0]}");
+    }
+    else
+    {
+        options.UseInMemoryDatabase("IoTDetectorDb");
+        Console.WriteLine("Using InMemory database (for demo purposes)");
+    }
+});
 
 // Add SignalR for real-time updates
 builder.Services.AddSignalR();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// Initialize and seed database
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    var context = services.GetRequiredService<ApplicationDbContext>();
+    var logger = services.GetRequiredService<ILogger<Program>>();
+
+    try
+    {
+        // Apply migrations for PostgreSQL
+        if (databaseProvider == "PostgreSQL")
+        {
+            logger.LogInformation("Applying database migrations...");
+            context.Database.Migrate();
+            logger.LogInformation("Database migrations applied successfully");
+        }
+
+        // Seed data if configured
+        var shouldSeed = builder.Configuration.GetValue<bool>("Database:SeedData");
+        if (shouldSeed)
+        {
+            DatabaseSeeder.SeedDatabase(context, logger);
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "An error occurred while initializing the database");
+        if (databaseProvider == "PostgreSQL")
+        {
+            logger.LogError("Make sure PostgreSQL is running and connection string is correct");
+            throw;
+        }
+    }
+}
+
+// Configure the HTTP request pipeline
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
+}
+else
+{
+    app.UseDeveloperExceptionPage();
 }
 
 app.UseHttpsRedirection();
 app.UseRouting();
-
 app.UseAuthorization();
 
 app.MapStaticAssets();
