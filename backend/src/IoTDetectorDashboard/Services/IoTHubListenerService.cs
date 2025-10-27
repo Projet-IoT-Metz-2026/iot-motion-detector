@@ -33,6 +33,14 @@ public class IoTHubListenerService : BackgroundService
     {
         _logger.LogInformation("IoT Hub Listener Service starting...");
 
+        // Check if IoT Hub is enabled
+        var iotHubEnabled = _configuration.GetValue<bool>("Azure:IoTHub:Enabled", false);
+        if (!iotHubEnabled)
+        {
+            _logger.LogInformation("Azure IoT Hub listener is disabled in configuration");
+            return;
+        }
+
         // Get IoT Hub connection string
         var connectionString = _configuration["Azure:IoTHub:ConnectionString"];
 
