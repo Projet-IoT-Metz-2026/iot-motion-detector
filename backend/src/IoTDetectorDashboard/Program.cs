@@ -4,6 +4,13 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Configure Kestrel to use PORT environment variable (Railway, Fly.io, etc.)
+var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.ListenAnyIP(int.Parse(port));
+});
+
 // Add services to the container
 builder.Services.AddControllersWithViews();
 
@@ -76,14 +83,14 @@ using (var scope = app.Services.CreateScope())
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
-    app.UseHsts();
+    // Note: HSTS disabled for Railway/cloud deployments (HTTPS handled by proxy)
 }
 else
 {
     app.UseDeveloperExceptionPage();
 }
 
-app.UseHttpsRedirection();
+// Note: UseHttpsRedirection disabled for cloud deployments (handled by proxy)
 app.UseRouting();
 app.UseAuthorization();
 
