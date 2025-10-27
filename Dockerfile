@@ -6,13 +6,12 @@
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 
-# Copy csproj and restore dependencies
-COPY backend/src/IoTDetectorDashboard/*.csproj ./
-RUN dotnet restore
+# Copy all project files
+COPY backend/src/IoTDetectorDashboard/ ./
 
-# Copy everything else and build
-COPY backend/src/IoTDetectorDashboard/. ./
-RUN dotnet publish -c Release -o /app/publish
+# Restore and build
+RUN dotnet restore IoTDetectorDashboard.csproj
+RUN dotnet publish IoTDetectorDashboard.csproj -c Release -o /app/publish --no-restore
 
 # Stage 2: Runtime
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
