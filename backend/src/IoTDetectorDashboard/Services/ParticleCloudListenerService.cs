@@ -53,7 +53,7 @@ public class ParticleCloudListenerService : BackgroundService
             var startInfo = new ProcessStartInfo
             {
                 FileName = "particle",
-                Arguments = $"subscribe {eventName} --json",
+                Arguments = $"subscribe {eventName}",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
