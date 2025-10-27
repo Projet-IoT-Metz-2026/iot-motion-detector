@@ -29,6 +29,11 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 // Add SignalR for real-time updates
 builder.Services.AddSignalR();
 
+// Add IoT Hub services
+builder.Services.AddSingleton<AlertGenerationService>();
+builder.Services.AddHostedService<IoTHubListenerService>();
+builder.Services.AddHostedService<DeviceMonitoringService>();
+
 var app = builder.Build();
 
 // Initialize and seed database

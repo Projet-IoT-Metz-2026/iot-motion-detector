@@ -142,7 +142,30 @@ IoTDetectorDashboard/
 
 ## Configuration Azure IoT Hub
 
-Pour connecter à Azure IoT Hub, mettez à jour `appsettings.json`:
+### Services Background Automatiques
+
+Le Dashboard inclut 3 services background qui tournent 24/7:
+
+1. **IoTHubListenerService** - Écoute les événements Azure IoT Hub
+   - Se connecte automatiquement au Event Hub built-in
+   - Parse les messages télémétrie des ESP32/Photon2
+   - Insère les données dans la base de données
+   - Broadcast les updates via SignalR en temps réel
+
+2. **AlertGenerationService** - Génération d'alertes intelligentes
+   - Motion threshold: > 10 détections en 5 minutes
+   - Weak signal: RSSI < -80 dBm
+   - Low memory: Free memory < 100KB
+   - Alertes automatiquement broadcast via SignalR
+
+3. **DeviceMonitoringService** - Surveillance des devices
+   - Vérifie les devices offline toutes les 5 minutes
+   - Génère des alertes "device_offline" si > 1 heure sans données
+   - Met à jour les statuts automatiquement
+
+### Activation Azure IoT Hub
+
+Mettez à jour `appsettings.json`:
 
 ```json
 {
@@ -153,6 +176,29 @@ Pour connecter à Azure IoT Hub, mettez à jour `appsettings.json`:
   }
 }
 ```
+
+**Redémarrez l'application**, les services se connecteront automatiquement!
+
+### Format de Message Télémétrie
+
+Les ESP32/Photon2 doivent envoyer des messages JSON:
+
+```json
+{
+  "eventType": "motion_detected",
+  "motionCount": 5,
+  "rssi": -65,
+  "freeMemory": 250000,
+  "uptime": 3600,
+  "firmwareVersion": "v3.0.0"
+}
+```
+
+Le Dashboard créera automatiquement:
+- ✅ Device si première connexion
+- ✅ Entrée SensorData dans la DB
+- ✅ Alertes si règles déclenchées
+- ✅ Broadcast SignalR aux clients connectés
 
 ## Déploiement
 
