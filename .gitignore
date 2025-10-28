@@ -103,3 +103,18 @@ infrastructure/modules/*.json
 
 # Backup files
 *.backup
+
+# Ignore build artifacts and temporary files
+**/bin/
+**/obj/
+backend/src/IoTHubProcessor/bin/
+backend/src/IoTHubProcessor/obj/
+
+# Ignore environment/credential files
+infrastructure/dps-credentials.env
+*.env
+.env.local
+*.secret
+
+# Ignore VSCode workspace storage
+.vscode/*storage*
