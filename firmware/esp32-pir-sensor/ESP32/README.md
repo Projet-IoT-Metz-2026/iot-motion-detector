@@ -1,3 +1,28 @@
+# ESP32 PIR Sensor (PlatformIO)
+
+Emplacement : `firmware/esp32-pir-sensor/ESP32`
+
+But : firmware pour un capteur PIR sur ESP32, envoi de télémétrie vers Azure DPS / IoT Hub.
+
+Fichiers clés :
+- `platformio.ini` : configuration PlatformIO (environnements / libraries).
+- `src/` : sources C++ (`azure_handler.cpp`, `dps_handler.cpp`, `pir_handler.cpp`, `ota_handler.cpp`, ...).
+- `include/` : headers (ex : `azure_handler.h`, `config_store.h`).
+
+Build & flash (exemples) :
+
+1) Installer PlatformIO dans VSCode ou via CLI.
+2) Builder :
+
+   pio run
+
+3) Flasher sur la carte :
+
+   pio run -t upload
+
+Notes de sécurité et d'intégration :
+- Le projet utilise PubSubClient (MQTT) pour la communication. Vérifiez la configuration TLS/CA (fichier `dps_handler.cpp` et `azure_handler.cpp`).
+- Évitez d'encoder des clés secrètes dans le firmware. Préférez DPS (provisioning) ou X.509.
 # 🏠 ESP32 Motion Detector - Azure IoT Hub
 
 ![Firmware](https://img.shields.io/badge/Firmware-v3.0.0-green)

@@ -1,3 +1,19 @@
+# Photon2 PIR Sensor (Photon2-v3)
+
+Emplacement : `firmware/photon2-pir-sensor/Photon2-v3`
+
+But : code et artefacts liés au firmware Photon2 (version v3 si fournie).
+
+Contenu et actions :
+- `compile-output.log` peut contenir la sortie de compilation et aider au debug.
+- Le build est spécifique à l'écosystème Photon/Particle — suivez les instructions locales du dossier si présentes.
+
+Commandes générales :
+- Utiliser l'outil de build/flash du vendor (Particle CLI ou outil fourni).
+
+Notes :
+- Gardez les dépendances et bibliothèques tierces à jour.
+- Ne placer aucune clé secrète dans les sources commitées.
 # 📡 Photon2 PIR Motion Detector - Azure IoT Hub v3.0.0
 
 ![Firmware](https://img.shields.io/badge/Firmware-v3.0.0-green)
